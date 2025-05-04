@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 from typing import List, NamedTuple
@@ -8,6 +9,7 @@ from src.rag_agent_api.services.retriever_service import CustomRetriever
 from src.rag_agent_api.services.llm_model_service import LLMModelService, SummarizeContentAndDocs
 from src.rag_agent_api.services.documents_saver_service import DocumentsSaver
 from src.rag_agent_api.services.text_splitter_service import TextSplitterService
+from src.rag_agent_api.config import VEC_BASES
 
 
 class SummDocsWithSourceAndIds(NamedTuple):
@@ -94,7 +96,7 @@ class VecStoreService:
             return context
         return self.model_service.get_super_brief_content(context, self._define_brief_max_word(context))
 
-    def save_docs_and_add_in_retriever(self) -> str:
+    def save_docs_and_add_in_retriever(self) -> (str, str):
         """Добавлет документы в векторную базу и возвращает
         краткое содержание без дополнитльно созданных вопросов
         """
@@ -103,13 +105,14 @@ class VecStoreService:
         self.retriever.vectorstore.add_documents(summarize_docs_with_ids)
         DocumentsSaver.save_source_docs_ids_names_in_files(user_id, doc_ids, source_docs)
         DocumentsSaver.add_file_id_with_name_in_file(user_id, source_docs[0].metadata["belongs_to"], self.file_name)
-        return self.super_brief_content(self.get_documents_without_add_questions(summarize_docs_with_ids))
+        return source_docs[0].metadata["belongs_to"], self.super_brief_content(
+            self.get_documents_without_add_questions(summarize_docs_with_ids))
 
     @staticmethod
     def clear_vector_stores(user_id: str):
         """Удаляет векторное хранилище пользователя"""
         collection_name = f"user_{user_id}"
-        client = chromadb.PersistentClient(path=f"/home/alex/PycharmProjects/pythonProject/src/chroma_db_{user_id}")
+        client = chromadb.PersistentClient(path=rf"{VEC_BASES}\chroma_db_{user_id}")
         if collection_name in [name for name in client.list_collections()]:
-            shutil.rmtree(f"/home/alex/PycharmProjects/pythonProject/src/chroma_db_{user_id}")
-            client.clear_system_cache()
+            client.delete_collection(collection_name)
+            # shutil.rmtree(rf"{VEC_BASES}\chroma_db_{user_id}")

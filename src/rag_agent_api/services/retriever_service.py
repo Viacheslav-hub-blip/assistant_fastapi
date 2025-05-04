@@ -4,6 +4,7 @@ from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from src.rag_agent_api.embeddings_init import embeddings
 from src.rag_agent_api.services.documents_getter_service import DocumentsGetterService
+from src.rag_agent_api.config import VEC_BASES
 
 
 class CustomRetriever:
@@ -37,7 +38,7 @@ class RetrieverSrvice:
         Если такое хранилище существует, возвращает существующие хранилище
         """
         collection_name = f"user_{user_id}"
-        client = chromadb.PersistentClient(path=f"/home/alex/PycharmProjects/pythonProject/src/chroma_db_{user_id}")
+        client = chromadb.PersistentClient(path=rf"{VEC_BASES}\chroma_db_{user_id}")
         if collection_name in [name for name in client.list_collections()]:
             collection = client.get_collection(collection_name)
             vec_store = Chroma(
@@ -55,7 +56,7 @@ class RetrieverSrvice:
         vec_store = Chroma(
             collection_name=collection_name,
             embedding_function=embeddings,
-            persist_directory=f"/home/alex/PycharmProjects/pythonProject/src/chroma_db_{user_id}",
+            persist_directory=rf"{VEC_BASES}\chroma_db_{user_id}",
             collection_metadata={"hnsw:space": "cosine"}
         )
         retriever = CustomRetriever(

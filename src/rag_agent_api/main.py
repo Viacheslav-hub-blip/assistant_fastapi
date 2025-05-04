@@ -22,4 +22,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#uvicorn src.main:app --use-colors --log-level debug --reload
+
+
+#uvicorn src.rag_agent_api.main:app --use-colors --log-level debug --reload

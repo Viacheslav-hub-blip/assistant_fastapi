@@ -19,3 +19,6 @@ some_questions_for_examples = [
     'Какой астронавт был вторым (вслед за Леоновым) вышедшим в открытый космос?',
 ]
 
+TEMP_DOWNLOADS = r'C:\Users\vrylk\OneDrive\Документы\Assistant\temp_downloads'
+USERS_DIRECTORY = r'C:\Users\vrylk\OneDrive\Документы\Assistant\users_directory'
+VEC_BASES = r'C:\Users\vrylk\OneDrive\Документы\Assistant\vec_bases'
