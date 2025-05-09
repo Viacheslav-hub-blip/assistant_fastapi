@@ -6,6 +6,7 @@ from fastapi import APIRouter, UploadFile, HTTPException, File, Form
 # SERVICES
 from src.rag_agent_api.services.retriever_service import RetrieverSrvice
 from src.rag_agent_api.services.documents_saver_service import DocumentsSaver
+from src.rag_agent_api.services.database.documents_saver_service import DocumentsSaverService
 from src.rag_agent_api.services.documents_getter_service import DocumentsGetterService
 from src.rag_agent_api.services.pdf_reader_service import PDFReader
 from src.rag_agent_api.services.vectore_store_service import VecStoreService
@@ -36,12 +37,12 @@ async def _invoke_agent(question: str, user_id: str, selected_file_id: str) -> s
     return generation
 
 
-async def _save_file(file) -> str:
+async def _save_file_local(user_id: int, work_space_id: int, file) -> str:
     try:
         contents = file.file.read()
-        file_id = hash(file.filename)
+        file_name = f"{user_id}_{work_space_id}_{file.filename}"
         type = 'pdf'
-        destination = rf"{TEMP_DOWNLOADS}\{file_id}.{type}"
+        destination = rf"{TEMP_DOWNLOADS}\{file_name}.{type}"
         with open(destination, 'wb') as f:
             f.write(contents)
         return destination
@@ -56,7 +57,7 @@ async def _get_doc_content(file_path: str):
     return content
 
 
-async def _save_doc_content(content: str, user_id: str,
+async def _save_doc_content(content: str, user_id: int,
                             file_name: str) -> (str, str):
     """Сохраняет извлеченную информацию"""
     retriever = RetrieverSrvice.get_or_create_retriever(user_id)
@@ -75,10 +76,11 @@ async def get_answer(question: str, user_id: str, selected_file_id: str):
 
 
 @router.post("/load_file")
-async def load_file(file: UploadFile = File(...), user_id: str = Form(...)):
-    destination = await _save_file(file)
+async def load_file(file: UploadFile = File(...), user_id: int = Form(...), work_space_id: int = Form(...)):
+    destination = await _save_file_local(user_id, work_space_id, file)
     content = await _get_doc_content(destination)
     doc_id, summarize_content = await _save_doc_content(content, user_id, file.filename)
+    DocumentsSaverService.save_file(user_id, work_space_id, file.filename, summarize_content)
     return {"doc_id": doc_id, "summary": summarize_content}
 
 

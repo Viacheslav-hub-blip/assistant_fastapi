@@ -33,11 +33,11 @@ class CustomRetriever:
 class RetrieverSrvice:
 
     @staticmethod
-    def get_or_create_retriever(user_id: str):
+    def get_or_create_retriever(user_id: int):
         """Создает векторноую базу и retriever для пользователя, если она не была найдена
         Если такое хранилище существует, возвращает существующие хранилище
         """
-        collection_name = f"user_{user_id}"
+        collection_name = f"{user_id}"
         client = chromadb.PersistentClient(path=rf"{VEC_BASES}\chroma_db_{user_id}")
         if collection_name in [name for name in client.list_collections()]:
             collection = client.get_collection(collection_name)

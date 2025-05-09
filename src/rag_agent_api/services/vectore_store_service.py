@@ -8,6 +8,8 @@ import chromadb
 from src.rag_agent_api.services.retriever_service import CustomRetriever
 from src.rag_agent_api.services.llm_model_service import LLMModelService, SummarizeContentAndDocs
 from src.rag_agent_api.services.documents_saver_service import DocumentsSaver
+from src.rag_agent_api.services.database.documents_saver_service import DocumentsSaverService
+
 from src.rag_agent_api.services.text_splitter_service import TextSplitterService
 from src.rag_agent_api.config import VEC_BASES
 
@@ -23,12 +25,16 @@ class VecStoreService:
                  model_service: LLMModelService,
                  retriever: CustomRetriever,
                  content: str,
-                 file_name: str
+                 file_name: str,
+                 user_id: int,
+                 work_space_id: int
                  ) -> None:
         self.model_service = model_service
         self.retriever = retriever
         self.content = content
         self.file_name = file_name
+        self.user_id = user_id
+        self.work_space_id = work_space_id
 
     def _get_summary_doc_content(self, split_docs: List[str]) -> SummarizeContentAndDocs:
         """Создает сжатые документы из полных фрагментов
@@ -60,18 +66,39 @@ class VecStoreService:
         ]
         return source_docs_with_metadata
 
-    def _get_summary_doc_with_metadata(self) -> SummDocsWithSourceAndIds:
-        """Возвращает сжатые документы с дополнительными данными, id документов
-        и исходные документы
-        """
-        source_split_documents: list[str] = TextSplitterService.get_semantic_split_documents(self.content)
-        summarized_docs: list[Document] = [Document(page_content=sum) for sum in
-                                           self._get_summary_doc_content(source_split_documents).summary_texts]
-        doc_ids, docs_section = [str(uuid4()) for _ in range(len(summarized_docs))], str(uuid4())
+    # def _get_summary_doc_with_metadata(self) -> SummDocsWithSourceAndIds:
+    #     """Возвращает сжатые документы с дополнительными данными, id документов
+    #     и исходные документы
+    #     """
+    #     source_split_documents: list[str] = TextSplitterService.get_semantic_split_documents(self.content)
+    #     summarized_docs: list[Document] = [Document(page_content=sum) for sum in
+    #                                        self._get_summary_doc_content(source_split_documents).summary_texts]
+    #     doc_ids, docs_section = [str(uuid4()) for _ in range(len(summarized_docs))], str(uuid4())
+    #
+    #     summarized_docs_with_metadata = self._add_metadata_in_summary_docs(doc_ids, docs_section, summarized_docs)
+    #     source_docs_with_metadata = self._add_metadata_in_source_docs(doc_ids, docs_section, source_split_documents)
+    #     return SummDocsWithSourceAndIds(summarized_docs_with_metadata, doc_ids, source_docs_with_metadata)
 
-        summarized_docs_with_metadata = self._add_metadata_in_summary_docs(doc_ids, docs_section, summarized_docs)
-        source_docs_with_metadata = self._add_metadata_in_source_docs(doc_ids, docs_section, source_split_documents)
-        return SummDocsWithSourceAndIds(summarized_docs_with_metadata, doc_ids, source_docs_with_metadata)
+    def get_chunks(self) -> list[str]:
+        source_split_documents: list[str] = TextSplitterService.get_semantic_split_documents(self.content)
+        return source_split_documents
+
+    def get_summarize_chunks(self, chunks: list[str]) -> list[str]:
+        summarized_docs: list[str] = [sum for sum in
+                                      self._get_summary_doc_content(chunks).summary_texts]
+        return summarized_docs
+
+    def add_metadata_to_chunks(self, chunks) -> list[Document]:
+        return [
+            Document(page_content=chunk, metadata={"source_doc_name": self.file_name, "doc_number": i}) for i, chunk in
+            enumerate(chunks)
+        ]
+
+    def add_metadata_to_summarized(self, summarized_chunks: list[str], ids_chunks: list[int]) -> list[Document]:
+        return [Document(page_content=sum,
+                         metadata={"doc_id": ids_chunks[i], "belongs_to": self.file_name, "doc_number": i}) for i, sum
+                in
+                enumerate(summarized_chunks)]
 
     def get_documents_without_add_questions(self, documents: list[Document]) -> list[Document]:
         """Удаляет из сжатых текстов дополнительные вопросы, которые были добавлены перед векторизацией"""
@@ -96,17 +123,27 @@ class VecStoreService:
             return context
         return self.model_service.get_super_brief_content(context, self._define_brief_max_word(context))
 
-    def save_docs_and_add_in_retriever(self) -> (str, str):
-        """Добавлет документы в векторную базу и возвращает
-        краткое содержание без дополнитльно созданных вопросов
-        """
-        summarize_docs_with_ids, doc_ids, source_docs = self._get_summary_doc_with_metadata()
-        user_id = self.retriever.vectorstore._collection_name[5:]
-        self.retriever.vectorstore.add_documents(summarize_docs_with_ids)
-        DocumentsSaver.save_source_docs_ids_names_in_files(user_id, doc_ids, source_docs)
-        DocumentsSaver.add_file_id_with_name_in_file(user_id, source_docs[0].metadata["belongs_to"], self.file_name)
-        return source_docs[0].metadata["belongs_to"], self.super_brief_content(
-            self.get_documents_without_add_questions(summarize_docs_with_ids))
+    def save_docs_and_add_in_retriever(self):
+        chunks = self.get_chunks()
+        chunks_with_metadata = self.add_metadata_to_chunks(chunks)
+        summarized_chunks = self.get_summarize_chunks(chunks)
+        ids_chunks = DocumentsSaverService.save_chunk(self.user_id, self.work_space_id, chunks_with_metadata)
+        summarized_chunks_with_metadata = self.add_metadata_to_summarized(summarized_chunks, ids_chunks)
+        self.retriever.vectorstore.add_documents(summarized_chunks_with_metadata)
+        return self.file_name, self.super_brief_content(
+            self.get_documents_without_add_questions(summarized_chunks_with_metadata))
+
+    # def save_docs_and_add_in_retriever(self) -> (str, str):
+    #     """Добавлет документы в векторную базу и возвращает
+    #     краткое содержание без дополнитльно созданных вопросов
+    #     """
+    #     summarize_docs_with_ids, doc_ids, source_docs = self._get_summary_doc_with_metadata()
+    #     user_id = self.retriever.vectorstore._collection_name[5:]
+    #     self.retriever.vectorstore.add_documents(summarize_docs_with_ids)
+    #     DocumentsSaver.save_source_docs_ids_names_in_files(user_id, doc_ids, source_docs)
+    #     DocumentsSaver.add_file_id_with_name_in_file(user_id, source_docs[0].metadata["belongs_to"], self.file_name)
+    #     return source_docs[0].metadata["belongs_to"], self.super_brief_content(
+    #         self.get_documents_without_add_questions(summarize_docs_with_ids))
 
     @staticmethod
     def clear_vector_stores(user_id: str):
