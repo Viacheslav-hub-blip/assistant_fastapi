@@ -1,5 +1,5 @@
 from typing import List, TypedDict
-from langchain_core.runnables import  RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -19,6 +19,7 @@ class GraphState(TypedDict):
         web_search: whether to add search
         documents: list of documents
     """
+    workspace_id: int
     question: str
     file_metadata_id: str
     user_id: str
@@ -148,8 +149,10 @@ class RagAgent:
     def retrieve_documents(self, state: GraphState):
         """Ищет документы и ограничивает выборку документами со сходством <= 1.3(наиболее релевантные)"""
         print(state["question_with_additions"])
-        retrieved_documents: List[Document] = self.retriever.get_relevant_documents(state["question_with_additions"],
-                                                                                    state["file_metadata_id"])
+        retrieved_documents: List[Document] = self.retriever.get_relevant_documents(state["workspace_id"],
+                                                                                    state["question_with_additions"],
+                                                                                    state["file_metadata_id"],
+                                                                                    )
         for d in retrieved_documents:
             print(d)
 

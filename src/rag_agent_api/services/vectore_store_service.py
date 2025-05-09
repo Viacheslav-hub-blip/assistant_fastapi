@@ -51,7 +51,7 @@ class VecStoreService:
         в группе. Сделано для дальнейшей возможности извлечения соседних документов"""
         summarize_docs_with_metadata = [
             Document(page_content=doc.page_content,
-                     metadata={"doc_id": doc_ids[i], "belongs_to": docs_section, "doc_number": i})
+                     metadata={"workspace_id": self.work_space_id, "doc_id": doc_ids[i], "belongs_to": docs_section, "doc_number": i})
             for i, doc in enumerate(summarized_docs)
         ]
         return summarize_docs_with_metadata

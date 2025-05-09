@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import declarative_base
-from connection import engine
+from src.database.connection import engine
 
 Base = declarative_base()
 
@@ -56,7 +56,7 @@ class Chunks(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     workspace_id = Column(Integer, ForeignKey('workspace.id'))
-    source_doc_name = Column(String, ForeignKey('chunks.file_name'))
+    source_doc_name = Column(String)
     doc_number = Column(Integer)
     summary_content = Column(String)
 

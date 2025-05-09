@@ -63,7 +63,6 @@ async def _save_doc_content(content: str, user_id: int,
     retriever = RetrieverSrvice.get_or_create_retriever(user_id)
     vecstore_store_service = VecStoreService(llm_model_service, retriever, content, file_name, user_id, work_space_id)
     doc_id, summarize_content = vecstore_store_service.save_docs_and_add_in_retriever()
-    DocumentsSaverService.save_file(user_id, work_space_id, file_name, summarize_content)
     return doc_id, summarize_content
 
 

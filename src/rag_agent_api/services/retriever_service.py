@@ -11,10 +11,13 @@ class CustomRetriever:
     def __init__(self, vectorstore: VectorStore):
         self.vectorstore = vectorstore
 
-    def get_relevant_documents(self, query: str, belongs_to: str = None) -> list[Document]:
+    def get_relevant_documents(self, workspace_id: int, query: str, belongs_to: str = None) -> list[Document]:
         if belongs_to:
             result_search_sim_docs = self.vectorstore.similarity_search_with_score(query, k=10,
-                                                                                   filter={"belongs_to": belongs_to})
+                                                                                   filter={
+                                                                                       "workspace_id": workspace_id,
+                                                                                       "belongs_to": belongs_to
+                                                                                   })
         else:
             result_search_sim_docs = self.vectorstore.similarity_search_with_score(query)
         collection_name = self.vectorstore._collection_name
@@ -37,7 +40,7 @@ class RetrieverSrvice:
         """Создает векторноую базу и retriever для пользователя, если она не была найдена
         Если такое хранилище существует, возвращает существующие хранилище
         """
-        collection_name = f"{user_id}"
+        collection_name = f"user_{user_id}"
         client = chromadb.PersistentClient(path=rf"{VEC_BASES}\chroma_db_{user_id}")
         if collection_name in [name for name in client.list_collections()]:
             collection = client.get_collection(collection_name)

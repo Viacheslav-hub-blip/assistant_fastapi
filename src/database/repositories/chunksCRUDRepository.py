@@ -5,14 +5,16 @@ from src.database.tables import Chunks
 from sqlalchemy import and_
 
 
-def insert_chunk(files: Chunks):
-    with session() as s:
-        s.add(files)
+def insert_chunk(chunk: Chunks) -> int:
+    with session as s:
+        s.add(chunk)
         s.commit()
+        s.flush()
+        return chunk.id
 
 
 def select_source_chunk(user_id: str, workspace_id: str, belongs_to: str, doc_number: str) -> Chunks:
-    with session() as s:
+    with session as s:
         return s.query(Chunks).filter(
-            and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id, Chunks.belongs_to == belongs_to,
+            and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id, Chunks.source_doc_name == belongs_to,
                  Chunks.doc_number == doc_number)).one()
