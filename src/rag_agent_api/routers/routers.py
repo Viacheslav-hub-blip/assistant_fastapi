@@ -28,10 +28,10 @@ class DocWithIdAndSummary(NamedTuple):
     summary: str
 
 
-async def _invoke_agent(question: str, user_id: str) -> str:
+async def _invoke_agent(question: str, user_id: str, selected_file_id: str) -> str:
     retriever = RetrieverSrvice.get_or_create_retriever(user_id)
     rag_agent = RagAgent(model=model_for_answer, retriever=retriever)
-    result = rag_agent().invoke({"question": question, "user_id": user_id, "file_metadata_id": None})
+    result = rag_agent().invoke({"question": question, "user_id": user_id, "file_metadata_id": selected_file_id})
     question, generation = result["question"], result["answer"]
     return generation
 
@@ -67,8 +67,9 @@ async def _save_doc_content(content: str, user_id: str,
 
 
 @router.get("/")
-async def get_answer(question: str, user_id: str):
-    answer = await _invoke_agent(question, user_id)
+async def get_answer(question: str, user_id: str, selected_file_id: str):
+    print("id", selected_file_id)
+    answer = await _invoke_agent(question, user_id, selected_file_id)
     print("answer", answer)
     return answer
 
