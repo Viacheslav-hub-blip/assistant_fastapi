@@ -123,7 +123,7 @@ class VecStoreService:
             return context
         return self.model_service.get_super_brief_content(context, self._define_brief_max_word(context))
 
-    def save_docs_and_add_in_retriever(self):
+    def save_docs_and_add_in_retriever(self) -> (str, str):
         chunks = self.get_chunks()
         chunks_with_metadata = self.add_metadata_to_chunks(chunks)
         summarized_chunks = self.get_summarize_chunks(chunks)

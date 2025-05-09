@@ -58,12 +58,12 @@ async def _get_doc_content(file_path: str):
 
 
 async def _save_doc_content(content: str, user_id: int,
-                            file_name: str) -> (str, str):
+                            file_name: str, work_space_id: int) -> (str, str):
     """Сохраняет извлеченную информацию"""
     retriever = RetrieverSrvice.get_or_create_retriever(user_id)
-    vecstore_store_service = VecStoreService(llm_model_service, retriever, content, file_name)
+    vecstore_store_service = VecStoreService(llm_model_service, retriever, content, file_name, user_id, work_space_id)
     doc_id, summarize_content = vecstore_store_service.save_docs_and_add_in_retriever()
-    DocumentsSaver.save_doc_summary(user_id, doc_id, summarize_content)
+    DocumentsSaverService.save_file(user_id, work_space_id, file_name, summarize_content)
     return doc_id, summarize_content
 
 
@@ -79,7 +79,7 @@ async def get_answer(question: str, user_id: str, selected_file_id: str):
 async def load_file(file: UploadFile = File(...), user_id: int = Form(...), work_space_id: int = Form(...)):
     destination = await _save_file_local(user_id, work_space_id, file)
     content = await _get_doc_content(destination)
-    doc_id, summarize_content = await _save_doc_content(content, user_id, file.filename)
+    doc_id, summarize_content = await _save_doc_content(content, user_id, file.filename, work_space_id)
     DocumentsSaverService.save_file(user_id, work_space_id, file.filename, summarize_content)
     return {"doc_id": doc_id, "summary": summarize_content}
 
