@@ -13,8 +13,11 @@ def insert_chunk(chunk: Chunks) -> int:
         return chunk.id
 
 
-def select_source_chunk(user_id: str, workspace_id: str, belongs_to: str, doc_number: str) -> Chunks:
+def select_source_chunk(user_id: int, workspace_id: int, belongs_to: str, doc_number: str) -> Chunks | None:
     with session as s:
-        return s.query(Chunks).filter(
+        res =  s.query(Chunks).filter(
             and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id, Chunks.source_doc_name == belongs_to,
-                 Chunks.doc_number == doc_number)).one()
+                 Chunks.doc_number == doc_number)).all()
+        if len(res) != 0:
+            return res[0]
+        return None

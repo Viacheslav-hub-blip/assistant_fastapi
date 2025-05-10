@@ -3,7 +3,7 @@ from langchain_core.vectorstores import VectorStore
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from src.rag_agent_api.embeddings_init import embeddings
-from src.rag_agent_api.services.documents_getter_service import DocumentsGetterService
+from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 from src.rag_agent_api.config import VEC_BASES
 
 
@@ -21,14 +21,14 @@ class CustomRetriever:
         else:
             result_search_sim_docs = self.vectorstore.similarity_search_with_score(query)
         collection_name = self.vectorstore._collection_name
+        user_id = collection_name.split('_')[1]
         result = []
         for result_search_sim_doc, score in result_search_sim_docs:
-            doc_id = result_search_sim_doc.metadata["doc_id"]
             belongs_to = result_search_sim_doc.metadata["belongs_to"]
             doc_number = result_search_sim_doc.metadata["doc_number"]
             result_search_sim_doc.metadata["score"] = score
-            source_doc = DocumentsGetterService.get_source_document(collection_name, doc_id, belongs_to, doc_number)
-            result_search_sim_doc.metadata["source_doc"] = source_doc.page_content
+            source_chunk = DocumentsGetterService.get_source_chunk(user_id, workspace_id, belongs_to, doc_number)
+            result_search_sim_doc.metadata["source_chunk_content"] = source_chunk.page_content
             result.append(result_search_sim_doc)
         return result
 

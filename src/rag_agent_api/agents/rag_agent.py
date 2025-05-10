@@ -6,7 +6,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
-from src.rag_agent_api.services.documents_getter_service import DocumentsGetterService
+from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 
 
 class GraphState(TypedDict):
@@ -22,7 +22,7 @@ class GraphState(TypedDict):
     workspace_id: int
     question: str
     file_metadata_id: str
-    user_id: str
+    user_id: int
     question_category: str
     question_with_additions: str
     retrieved_documents: List[Document]
@@ -165,35 +165,32 @@ class RagAgent:
         res_dict = {}
         for sec, numbers in section_numbers_dict.items():
             numbers_int: list[int] = [int(s) for s in numbers.split("/")]
-            # print("numbers_int", numbers_int)
             neighboring_numbers: list[int] = numbers_int + [n - 1 for n in numbers_int] + [n + 1 for n in numbers_int]
-            # print("neighboring_numbers", neighboring_numbers)
             unique_neighboring_numbers = sorted(set(neighboring_numbers))
-            # print("unique_neighboring_numbers", unique_neighboring_numbers)
             res_dict[sec] = "/".join([str(i) for i in unique_neighboring_numbers])
         print("res_dict", res_dict)
         return res_dict
 
-    def get_neighboring_docs(self, state: GraphState):
-        """Ищет соседние исходные документы к тем, что были надйены при посике с помощью retriever"""
+    def section_numbers_dict(self, retrieved_documents: list[Document]) -> dict:
         section_numbers_dict = {}
-        for doc in state["retrieved_documents"]:
+        for doc in retrieved_documents:
             if doc.metadata["belongs_to"] in section_numbers_dict:
                 section_numbers_dict[doc.metadata["belongs_to"]] += f'/{doc.metadata["doc_number"]}'
             else:
                 section_numbers_dict[doc.metadata["belongs_to"]] = str(doc.metadata["doc_number"])
+        return section_numbers_dict
+
+    def get_neighboring_docs(self, state: GraphState):
+        """Ищет соседние исходные документы к тем, что были надйены при посике с помощью retriever"""
+        section_numbers_dict = self.section_numbers_dict(state["retrieved_documents"])
         neighboring_docs_numbers: dict = self.get_neighboring_numbers_doc(section_numbers_dict)
-        # print("neighboring_docs_numbers", neighboring_docs_numbers)
         neighboring_docs: list[Document] = []
-        for sec, numbers in neighboring_docs_numbers.items():
+        for belongs_to, numbers in neighboring_docs_numbers.items():
             doc_nums = numbers.split("/")
             for num in doc_nums:
-                document = DocumentsGetterService.get_document_by_user_id_section_and_number(state["user_id"], sec, num)
-                if len(document.page_content) > 0:
-                    document.metadata["belongs_to"] = sec
-                    neighboring_docs.append(document)
-        # print("count docs", len(neighboring_docs))
-        # print("------get_neighboring_docs------", neighboring_docs)
+                chunk = DocumentsGetterService.get_source_chunk(state["user_id"], state["workspace_id"], belongs_to,
+                                                                num)
+                neighboring_docs.append(chunk)
         return {"neighboring_docs": neighboring_docs}
 
     def rerank_document_chain(self, question: str, document: Document) -> str:
@@ -218,12 +215,8 @@ class RagAgent:
         docs_with_rank_over = []
         for doc in retrieved_neighboring_docs:
             rank = self.rerank_document_chain(question, doc)
-            print("rank: ", rank)
             if int(rank) >= 3:
                 docs_with_rank_over.append(doc)
-        for d in docs_with_rank_over:
-            print("-----------")
-            print(d.metadata)
         return {"neighboring_docs": docs_with_rank_over}
 
     def checking_possibility_responses_chain(self, question: str, context: str):
@@ -251,7 +244,6 @@ class RagAgent:
     def checking_possibility_responses(self, state: GraphState):
         """Получает результат оценки возможности ответа на вопрос по контексту"""
         doc_context = "".join([doc.page_content for doc in state["neighboring_docs"]])
-        print("doc content", doc_context)
         if len(doc_context) != 0:
             binary_check = self.checking_possibility_responses_chain(state["question"], doc_context)
             print("------checking_possibility_responses------", binary_check)
@@ -259,7 +251,6 @@ class RagAgent:
                 return "да"
             else:
                 return "нет"
-        print("нет контекста")
         return "нет"
 
     def answer_with_context_chain(self, question: str, context: str):
@@ -294,7 +285,6 @@ class RagAgent:
     def generate_answer_with_retrieve_context(self, state: GraphState):
         doc_context = "".join([doc.page_content for doc in state["neighboring_docs"]])
         answer = self.answer_with_context_chain(state["question"], doc_context)
-        # print("------generate_answer_with_retrieve_context------", answer)
         return {"answer_with_retrieve": answer}
 
     def answer_without_context_chain(self, question: str):
@@ -406,7 +396,7 @@ class RagAgent:
         documents: list[Document] = state["neighboring_docs"]
         print("------------------------------")
         print(documents)
-        file_ids_names = DocumentsGetterService.get_files_ids_names(state["user_id"])
+        file_ids_names = DocumentsGetterService.get_files_ids_names(state["user_id"], state["workspace_id"])
         used_docs_names = list(set([file_ids_names.get(doc.metadata["belongs_to"]) for doc in documents]))
         return {"used_docs": used_docs_names}
 
