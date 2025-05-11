@@ -8,6 +8,7 @@ from src.rag_agent_api.services.retriever_service import RetrieverSrvice
 from src.rag_agent_api.services.database.documents_saver_service import DocumentsSaverService
 from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 from src.rag_agent_api.services.database.documents_remove_service import DocumentsRemoveService
+from src.rag_agent_api.services.database.workspaces_service import WorkspacesService, WorkSpace
 from src.rag_agent_api.services.pdf_reader_service import PDFReader
 from src.rag_agent_api.services.vectore_store_service import VecStoreService
 from src.rag_agent_api.services.llm_model_service import LLMModelService
@@ -104,3 +105,13 @@ async def delete_file(user_id: int, workspace_id: int, file_id: int, file_name: 
     DocumentsRemoveService.delete_document_by_id(user_id, workspace_id, file_id)
     VecStoreService.delete_file_from_vecstore(user_id, workspace_id, file_name)
     return "Файл удален"
+
+
+@router.get('/user_workspaces')
+async def user_workspaces(user_id: int) -> list[WorkSpace]:
+    return WorkspacesService.get_all_user_workspaces(user_id)
+
+
+@router.post("/create_new_workspace")
+async def create_new_workspace(user_id: int, workspace_name: str) -> int:
+    return WorkspacesService.create_workspace(user_id, workspace_name)
