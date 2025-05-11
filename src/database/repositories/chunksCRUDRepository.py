@@ -21,9 +21,3 @@ def select_source_chunk(user_id: int, workspace_id: int, belongs_to: str, doc_nu
         if len(res) != 0:
             return res[0]
         return None
-
-
-# def delete_chunks_by_belongs(user_id: int, workspace_id: int, belongs_to: str) -> None:
-#     with session as s:
-#         return s.query(Chunks).filter_by(and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id,
-#                                               Chunks.source_doc_name == belongs_to)).delete()

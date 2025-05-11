@@ -59,7 +59,8 @@ class VecStoreService:
 
     def add_metadata_to_summarized(self, summarized_chunks: list[str], ids_chunks: list[int]) -> list[Document]:
         return [Document(page_content=sum,
-                         metadata={"doc_id": ids_chunks[i], "belongs_to": self.file_name, "doc_number": i}) for i, sum
+                         metadata={"doc_id": ids_chunks[i], "workspace_id": self.work_space_id,
+                                   "belongs_to": self.file_name, "doc_number": i}) for i, sum
                 in
                 enumerate(summarized_chunks)]
 
@@ -96,7 +97,6 @@ class VecStoreService:
         return self.file_name, self.super_brief_content(
             self.get_documents_without_add_questions(summarized_chunks_with_metadata))
 
-
     @staticmethod
     def clear_vector_stores(user_id: int, workspace_id: int):
         """Удаляет векторное хранилище пользователя"""
@@ -104,7 +104,6 @@ class VecStoreService:
         client = chromadb.PersistentClient(path=rf"{VEC_BASES}\chroma_db_{user_id}")
         if collection_name in [name for name in client.list_collections()]:
             client.delete_collection(collection_name)
-            # shutil.rmtree(rf"{VEC_BASES}\chroma_db_{user_id}")
 
     @staticmethod
     def delete_file_from_vecstore(user_id: int, workspace_id: int, belongs_to: str):

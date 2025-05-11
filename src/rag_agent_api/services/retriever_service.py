@@ -15,11 +15,19 @@ class CustomRetriever:
         if belongs_to:
             result_search_sim_docs = self.vectorstore.similarity_search_with_score(query, k=10,
                                                                                    filter={
-                                                                                       "workspace_id": workspace_id,
-                                                                                       "belongs_to": belongs_to
+                                                                                       "$and": [
+                                                                                           {
+                                                                                               "workspace_id": workspace_id,
+                                                                                           },
+                                                                                           {
+                                                                                               "belongs_to": belongs_to
+                                                                                           }
+                                                                                       ]
                                                                                    })
         else:
-            result_search_sim_docs = self.vectorstore.similarity_search_with_score(query)
+            result_search_sim_docs = self.vectorstore.similarity_search_with_score(query, k=10, filter={
+                "workspace_id": workspace_id
+            })
         collection_name = self.vectorstore._collection_name
         user_id = collection_name.split('_')[1]
         result = []
@@ -30,6 +38,7 @@ class CustomRetriever:
             source_chunk = DocumentsGetterService.get_source_chunk(user_id, workspace_id, belongs_to, doc_number)
             result_search_sim_doc.metadata["source_chunk_content"] = source_chunk.page_content
             result.append(result_search_sim_doc)
+        print("get_relevant_documents in ret serv", result)
         return result
 
 
