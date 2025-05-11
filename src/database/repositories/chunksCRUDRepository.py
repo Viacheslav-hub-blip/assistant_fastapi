@@ -15,9 +15,15 @@ def insert_chunk(chunk: Chunks) -> int:
 
 def select_source_chunk(user_id: int, workspace_id: int, belongs_to: str, doc_number: str) -> Chunks | None:
     with session as s:
-        res =  s.query(Chunks).filter(
+        res = s.query(Chunks).filter(
             and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id, Chunks.source_doc_name == belongs_to,
                  Chunks.doc_number == doc_number)).all()
         if len(res) != 0:
             return res[0]
         return None
+
+
+# def delete_chunks_by_belongs(user_id: int, workspace_id: int, belongs_to: str) -> None:
+#     with session as s:
+#         return s.query(Chunks).filter_by(and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id,
+#                                               Chunks.source_doc_name == belongs_to)).delete()

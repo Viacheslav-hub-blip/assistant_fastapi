@@ -56,6 +56,7 @@ class Chunks(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     workspace_id = Column(Integer, ForeignKey('workspace.id'))
+    source_doc_id = Column(Integer, ForeignKey('files.id'))
     source_doc_name = Column(String)
     doc_number = Column(Integer)
     summary_content = Column(String)

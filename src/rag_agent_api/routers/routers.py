@@ -5,9 +5,9 @@ from src.rag_agent_api.config import TEMP_DOWNLOADS
 from fastapi import APIRouter, UploadFile, HTTPException, File, Form
 # SERVICES
 from src.rag_agent_api.services.retriever_service import RetrieverSrvice
-from src.rag_agent_api.services.documents_saver_service import DocumentsSaver
 from src.rag_agent_api.services.database.documents_saver_service import DocumentsSaverService
-from src.rag_agent_api.services.documents_getter_service import DocumentsGetterService
+from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
+from src.rag_agent_api.services.database.documents_remove_service import DocumentsRemoveService
 from src.rag_agent_api.services.pdf_reader_service import PDFReader
 from src.rag_agent_api.services.vectore_store_service import VecStoreService
 from src.rag_agent_api.services.llm_model_service import LLMModelService
@@ -29,11 +29,11 @@ class DocWithIdAndSummary(NamedTuple):
     summary: str
 
 
-async def _invoke_agent(question: str, user_id: int, workspace_id: int, selected_file_id: str) -> str:
-    retriever = RetrieverSrvice.get_or_create_retriever(user_id)
+async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str) -> str:
+    retriever = RetrieverSrvice.get_or_create_retriever(user_id, workspace_id)
     rag_agent = RagAgent(model=model_for_answer, retriever=retriever)
     result = rag_agent().invoke(
-        {"question": question, "user_id": user_id, "workspace_id": workspace_id, "file_metadata_id": selected_file_id})
+        {"question": question, "user_id": user_id, "workspace_id": workspace_id, "belongs_to": belongs_to})
     question, generation = result["question"], result["answer"]
     return generation
 
@@ -61,16 +61,16 @@ async def _get_doc_content(file_path: str):
 async def _save_doc_content(content: str, user_id: int,
                             file_name: str, work_space_id: int) -> (str, str):
     """Сохраняет извлеченную информацию"""
-    retriever = RetrieverSrvice.get_or_create_retriever(user_id)
+    retriever = RetrieverSrvice.get_or_create_retriever(user_id, work_space_id)
     vecstore_store_service = VecStoreService(llm_model_service, retriever, content, file_name, user_id, work_space_id)
     doc_id, summarize_content = vecstore_store_service.save_docs_and_add_in_retriever()
     return doc_id, summarize_content
 
 
 @router.get("/")
-async def get_answer(question: str, user_id: int, workspace_id: int, selected_file_id: str=None):
-    print("id", selected_file_id)
-    answer = await _invoke_agent(question, user_id, workspace_id, selected_file_id)
+async def get_answer(question: str, user_id: int, workspace_id: int, belongs_to: str = None):
+    print("id", belongs_to)
+    answer = await _invoke_agent(question, user_id, workspace_id, belongs_to)
     print("answer", answer)
     return answer
 
@@ -85,15 +85,22 @@ async def load_file(file: UploadFile = File(...), user_id: int = Form(...), work
 
 
 @router.get("/my_files")
-async def my_files(user_id: str) -> list[DocWithIdAndSummary]:
-    all_files_ids_names = DocumentsGetterService.get_files_ids_names(user_id)
-    files_summary = DocumentsGetterService.get_files_summary(user_id)
+async def my_files(user_id: int, workspace_id: int) -> list[DocWithIdAndSummary]:
+    all_files_ids_names = DocumentsGetterService.get_files_ids_names(user_id, workspace_id)
+    files_summary = DocumentsGetterService.get_files_with_summary(user_id, workspace_id)
     docs = [DocWithIdAndSummary(k, v, files_summary[k]) for k, v in all_files_ids_names.items()]
     return docs
 
 
 @router.get("/delete_all_files")
-async def delete_all_files(user_id: str):
-    VecStoreService.clear_vector_stores(user_id)
-    DocumentsSaver.clear_user_directory(user_id)
+async def delete_all_files(user_id: int, workspace_id: int):
+    VecStoreService.clear_vector_stores(user_id, workspace_id)
+    DocumentsRemoveService.delete_all_files_in_workspace(user_id, workspace_id)
     return "Загруженные документы удалены"
+
+
+@router.get("/delete_file")
+async def delete_file(user_id: int, workspace_id: int, file_id: int, file_name: str):
+    DocumentsRemoveService.delete_document_by_id(user_id, workspace_id, file_id)
+    VecStoreService.delete_file_from_vecstore(user_id, workspace_id, file_name)
+    return "Файл удален"

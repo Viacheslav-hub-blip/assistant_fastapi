@@ -21,7 +21,7 @@ class GraphState(TypedDict):
     """
     workspace_id: int
     question: str
-    file_metadata_id: str
+    belongs_to: str
     user_id: int
     question_category: str
     question_with_additions: str
@@ -149,9 +149,10 @@ class RagAgent:
     def retrieve_documents(self, state: GraphState):
         """Ищет документы и ограничивает выборку документами со сходством <= 1.3(наиболее релевантные)"""
         print(state["question_with_additions"])
+        print("belongs_to", state["belongs_to"])
         retrieved_documents: List[Document] = self.retriever.get_relevant_documents(state["workspace_id"],
                                                                                     state["question_with_additions"],
-                                                                                    state["file_metadata_id"],
+                                                                                    state["belongs_to"],
                                                                                     )
         for d in retrieved_documents:
             print(d)
@@ -190,7 +191,8 @@ class RagAgent:
             for num in doc_nums:
                 chunk = DocumentsGetterService.get_source_chunk(state["user_id"], state["workspace_id"], belongs_to,
                                                                 num)
-                neighboring_docs.append(chunk)
+                if len(chunk.page_content) > 0:
+                    neighboring_docs.append(chunk)
         return {"neighboring_docs": neighboring_docs}
 
     def rerank_document_chain(self, question: str, document: Document) -> str:
