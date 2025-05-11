@@ -6,6 +6,13 @@ from langchain_core.documents import Document
 class DocumentsGetterService:
     @staticmethod
     def get_source_chunk(user_id: int, workspace_id: int, belongs_to: str, doc_number: str) -> Document:
+        
+        """Извлечение исходного фрагмента текста
+        belongs_to  - название документа, к которому принадлежит краткое содержание 
+        doc_number  - номер фрагмента
+
+        returns: Document, который содержит текст исходного фрагмента и metadata с его принадлежностью и позицией
+        """
         chunk = chunksCRUDRepository.select_source_chunk(user_id, workspace_id, belongs_to, doc_number)
         if chunk:
             print("source chunk from db", chunk)
@@ -16,6 +23,10 @@ class DocumentsGetterService:
 
     @staticmethod
     def get_files_ids_names(user_id: int, workspace_id: int) -> dict[str, str]:
+        """
+        Возвращает все id и названия файлов пользователя в workspace
+        {"id": "name"}
+        """
         files = filesCRUDRepository.select_all_by_user_id_and_work_space_id(user_id, workspace_id)
         result: dict[str, str] = {}
         for f in files:
@@ -24,6 +35,8 @@ class DocumentsGetterService:
 
     @staticmethod
     def get_files_with_summary(user_id: int, workspace_id: int) -> dict[str, str]:
+        """Возвращает загруженные файлы с их кратких содержанием """
+        {"id": "summary"}
         files = filesCRUDRepository.select_all_by_user_id_and_work_space_id(user_id, workspace_id)
         result: dict[str, str] = {}
         for f in files:
