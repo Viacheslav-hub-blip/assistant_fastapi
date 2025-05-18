@@ -398,8 +398,8 @@ class RagAgent:
         documents: list[Document] = state["neighboring_docs"]
         print("------------------------------")
         print(documents)
-        file_ids_names = DocumentsGetterService.get_files_ids_names(state["user_id"], state["workspace_id"])
-        used_docs_names = list(set([file_ids_names.get(doc.metadata["belongs_to"]) for doc in documents]))
+        used_docs_names = list(set([doc.metadata["belongs_to"] for doc in documents]))
+        print("used doc anames in agent", used_docs_names)
         return {"used_docs": used_docs_names}
 
     def compile_graph(self):

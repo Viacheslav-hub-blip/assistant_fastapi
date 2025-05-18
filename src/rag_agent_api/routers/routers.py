@@ -1,8 +1,8 @@
-from typing import NamedTuple
+from typing import NamedTuple, List
 
 from src.rag_agent_api.config import TEMP_DOWNLOADS
 # FastApi
-from fastapi import APIRouter, UploadFile, HTTPException, File, Form
+from fastapi import APIRouter, UploadFile, File, Form
 # SERVICES
 from src.rag_agent_api.services.retriever_service import RetrieverSrvice
 from src.rag_agent_api.services.database.documents_saver_service import DocumentsSaverService
@@ -16,6 +16,7 @@ from src.rag_agent_api.services.llm_model_service import LLMModelService
 from src.rag_agent_api.langchain_model_init import model_for_answer
 from src.rag_agent_api.agents.rag_agent import RagAgent
 from src.rag_agent_api.langchain_model_init import model_for_brief_content
+from langchain_core.documents import Document
 
 router = APIRouter(
     prefix="/agent",
@@ -30,13 +31,23 @@ class DocWithIdAndSummary(NamedTuple):
     summary: str
 
 
-async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str) -> str:
+class AgentAnswer(NamedTuple):
+    answer: str
+    used_docs_names: List[str]
+    used_docs: List[str]
+
+
+async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str) -> AgentAnswer:
+    used_docs_names, used_docs = [], []
     retriever = RetrieverSrvice.get_or_create_retriever(user_id, workspace_id)
     rag_agent = RagAgent(model=model_for_answer, retriever=retriever)
     result = rag_agent().invoke(
         {"question": question, "user_id": user_id, "workspace_id": workspace_id, "belongs_to": belongs_to})
     question, generation = result["question"], result["answer"]
-    return generation
+    if result["used_docs"]:
+        used_docs_names = result["used_docs"]
+        used_docs = [doc.page_content for doc in result["neighboring_docs"]]
+    return AgentAnswer(generation, used_docs_names, used_docs)
 
 
 async def _save_file_local(user_id: int, work_space_id: int, file) -> str:
@@ -69,7 +80,7 @@ async def _save_doc_content(content: str, user_id: int,
 
 
 @router.get("/")
-async def get_answer(question: str, user_id: int, workspace_id: int, belongs_to: str = None):
+async def get_answer(question: str, user_id: int, workspace_id: int, belongs_to: str = None) -> AgentAnswer:
     print("id", belongs_to)
     answer = await _invoke_agent(question, user_id, workspace_id, belongs_to)
     print("answer", answer)
@@ -112,6 +123,11 @@ async def user_workspaces(user_id: int) -> list[WorkSpace]:
     return WorkspacesService.get_all_user_workspaces(user_id)
 
 
-@router.post("/create_new_workspace")
+@router.get("/create_new_workspace")
 async def create_new_workspace(user_id: int, workspace_name: str) -> int:
     return WorkspacesService.create_workspace(user_id, workspace_name)
+
+
+@router.get("/save_message")
+async def save_message(user_id: int, workspace_id: int, message: str, type: str) -> None:
+    pass

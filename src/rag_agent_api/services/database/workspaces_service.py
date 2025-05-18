@@ -1,0 +1,19 @@
+from src.database.repositories import workSpaceCRUDRepository
+from typing import NamedTuple, List
+
+
+class WorkSpace(NamedTuple):
+    workspace_id: int
+    user_id: int
+    workspace_name: str
+
+
+class WorkspacesService:
+    @staticmethod
+    def get_all_user_workspaces(user_id: int) -> List[WorkSpace]:
+        return [WorkSpace(space.id, space.user_id, space.name) for space in
+                workSpaceCRUDRepository.select_all_by_user_id(user_id)]
+
+    @staticmethod
+    def create_workspace(user_id: int, workspace_name: str) -> int:
+        return workSpaceCRUDRepository.create_workspace(user_id, workspace_name)
