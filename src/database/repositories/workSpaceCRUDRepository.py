@@ -9,7 +9,7 @@ def create_workspace(user_id: int, workspace_name: str) -> int:
     with session as s:
         s.add(space)
         s.commit()
-        print("mew workspace id",space.id )
+        print("mew workspace id", space.id)
         return space.id
 
 

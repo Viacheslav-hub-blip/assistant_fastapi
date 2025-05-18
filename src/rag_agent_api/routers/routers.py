@@ -9,6 +9,7 @@ from src.rag_agent_api.services.database.documents_saver_service import Document
 from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 from src.rag_agent_api.services.database.documents_remove_service import DocumentsRemoveService
 from src.rag_agent_api.services.database.workspaces_service import WorkspacesService, WorkSpace
+from src.rag_agent_api.services.database.messages_service import MessagesService
 from src.rag_agent_api.services.pdf_reader_service import PDFReader
 from src.rag_agent_api.services.vectore_store_service import VecStoreService
 from src.rag_agent_api.services.llm_model_service import LLMModelService
@@ -35,6 +36,11 @@ class AgentAnswer(NamedTuple):
     answer: str
     used_docs_names: List[str]
     used_docs: List[str]
+
+
+class Message(NamedTuple):
+    type: str
+    message: str
 
 
 async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str) -> AgentAnswer:
@@ -130,4 +136,10 @@ async def create_new_workspace(user_id: int, workspace_name: str) -> int:
 
 @router.get("/save_message")
 async def save_message(user_id: int, workspace_id: int, message: str, type: str) -> None:
-    pass
+    MessagesService.insert_message(user_id, workspace_id, message, type)
+
+
+@router.get("/get_messages")
+async def get_user_messages(user_id: int, workspace_id: int) -> list[Message]:
+    messages = MessagesService.get_user_messages(user_id, workspace_id)
+    return [Message(mes.message, mes.message_type) for mes in messages]
