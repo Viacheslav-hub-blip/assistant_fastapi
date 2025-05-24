@@ -9,7 +9,7 @@ from src.rag_agent_api.services.database.documents_saver_service import Document
 from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 from src.rag_agent_api.services.database.documents_remove_service import DocumentsRemoveService
 from src.rag_agent_api.services.database.workspaces_service import WorkspacesService, WorkSpace
-from src.rag_agent_api.services.database.messages_service import MessagesService
+from src.rag_agent_api.services.database.messages_service import MessagesService, Message
 from src.rag_agent_api.services.pdf_reader_service import PDFReader
 from src.rag_agent_api.services.vectore_store_service import VecStoreService
 from src.rag_agent_api.services.llm_model_service import LLMModelService
@@ -38,22 +38,25 @@ class AgentAnswer(NamedTuple):
     used_docs: List[str]
 
 
-class Message(NamedTuple):
-    type: str
-    message: str
-
-
-async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str) -> AgentAnswer:
+async def format_agent_answer(answer) -> AgentAnswer:
     used_docs_names, used_docs = [], []
+    question, generation = answer["question"], answer["answer"]
+    if answer["used_docs"]:
+        used_docs_names = answer["used_docs"]
+        used_docs = [doc.page_content for doc in answer["neighboring_docs"]]
+    return AgentAnswer(generation, used_docs_names, used_docs)
+
+
+async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str,
+                        chat_history: list[Message]) -> AgentAnswer:
     retriever = RetrieverSrvice.get_or_create_retriever(user_id, workspace_id)
     rag_agent = RagAgent(model=model_for_answer, retriever=retriever)
+    chat_history = [(mess.type, mess.message) for mess in chat_history]
+    print("----------CHAT HISTORY----------", chat_history)
     result = rag_agent().invoke(
-        {"question": question, "user_id": user_id, "workspace_id": workspace_id, "belongs_to": belongs_to})
-    question, generation = result["question"], result["answer"]
-    if result["used_docs"]:
-        used_docs_names = result["used_docs"]
-        used_docs = [doc.page_content for doc in result["neighboring_docs"]]
-    return AgentAnswer(generation, used_docs_names, used_docs)
+        {"question": question, "user_id": user_id, "workspace_id": workspace_id, "belongs_to": belongs_to,
+         "chat_history": chat_history})
+    return await format_agent_answer(result)
 
 
 async def _save_file_local(user_id: int, work_space_id: int, file) -> str:
@@ -87,9 +90,10 @@ async def _save_doc_content(content: str, user_id: int,
 
 @router.get("/")
 async def get_answer(question: str, user_id: int, workspace_id: int, belongs_to: str = None) -> AgentAnswer:
-    print("id", belongs_to)
-    answer = await _invoke_agent(question, user_id, workspace_id, belongs_to)
-    print("answer", answer)
+    MessagesService.insert_message(user_id, workspace_id, question, "user")
+    chat_history = MessagesService.get_user_messages(user_id, workspace_id)
+    answer = await _invoke_agent(question, user_id, workspace_id, belongs_to, chat_history)
+    MessagesService.insert_message(user_id, workspace_id, answer.answer, "assistant")
     return answer
 
 
@@ -134,12 +138,7 @@ async def create_new_workspace(user_id: int, workspace_name: str) -> int:
     return WorkspacesService.create_workspace(user_id, workspace_name)
 
 
-@router.get("/save_message")
-async def save_message(user_id: int, workspace_id: int, message: str, type: str) -> None:
-    MessagesService.insert_message(user_id, workspace_id, message, type)
-
-
 @router.get("/get_messages")
 async def get_user_messages(user_id: int, workspace_id: int) -> list[Message]:
     messages = MessagesService.get_user_messages(user_id, workspace_id)
-    return [Message(mes.message, mes.message_type) for mes in messages]
+    return [Message(mes.message, mes.type) for mes in messages]

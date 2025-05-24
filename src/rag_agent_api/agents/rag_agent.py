@@ -1,12 +1,17 @@
-from typing import List, TypedDict
+from typing import List, TypedDict, NamedTuple
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.documents import Document
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
 from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
+
+
+class Message(NamedTuple):
+    type: str
+    message: str
 
 
 class GraphState(TypedDict):
@@ -19,18 +24,23 @@ class GraphState(TypedDict):
         web_search: whether to add search
         documents: list of documents
     """
-    workspace_id: int
     question: str
-    belongs_to: str
     user_id: int
+    workspace_id: int
+    belongs_to: str
+    chat_history: list[tuple[str, str]]
+
     question_category: str
     question_with_additions: str
-    retrieved_documents: List[Document]
-    neighboring_docs: List[Document]
+
+    retrieved_documents: list[Document]
+    neighboring_docs: list[Document]
+
     answer_with_retrieve: str
     answer: str
     answer_without_retrieve: bool
-    used_docs: List[str]
+
+    used_docs: list[str]
 
 
 class RagAgent:
@@ -255,15 +265,15 @@ class RagAgent:
                 return "нет"
         return "нет"
 
-    def answer_with_context_chain(self, question: str, context: str):
+    def answer_with_context_chain(self, question: str, context: str, chat_history: list[tuple[str, str]]):
         prompt = """
         Ты — интеллектуальный ассистент, который анализирует предоставленный контекст и формулирует точный, информативный ответ на вопрос пользователя.\n
         Инстуркции:\n
-        Внимательно прочитай контекст и вопрос.\n        
+        Внимательно прочитай контекст и вопрос, а также историю диалога.\n        
         Ответ должен быть:\n
         -Максимально подробным, грамотным и содержащим полную информацию\n
         -Каждый ответ должен быть точным, правдимым и отвечать на вопрос пользователя\n
-        -Основанным только на контексте (не добавляй внешних знаний).\n        
+        -Основанным только на контексте и истории диалога (не добавляй внешних знаний).\n        
         -Отвечай простым языком(если в вопросе не скзаано другое) и используй вставки из найденного контекста в виде цитат.\n
         Для этого тебе стоит:\n
         -Рассуждать шаг за шагом\n
@@ -273,23 +283,27 @@ class RagAgent:
         Найденный контекст: {context}\n        
         Важно: проверь правильность всех фактов, которые пишешь. Проверь имена действующих лиц и соотвествие твоего ответа реальности.\n
         Не описывай все предыщие шаги о размышлениях в ответе. Дай только ответ
+        История диалога с пользователем:
         """
-        system_prompt = ChatPromptTemplate.from_messages(
+
+        prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", prompt),
+                MessagesPlaceholder("history"),
                 ("human", "Вопрос: {question}")
             ]
         )
-        chain = system_prompt | RunnablePassthrough(
+
+        chain = prompt | RunnablePassthrough(
             lambda x: print('Final prompt:\n', x)) | self.model | StrOutputParser()
-        return chain.invoke({"question": question, "context": context})
+        return chain.invoke({"history": chat_history, "question": question, "context": context})
 
     def generate_answer_with_retrieve_context(self, state: GraphState):
         doc_context = "".join([doc.page_content for doc in state["neighboring_docs"]])
-        answer = self.answer_with_context_chain(state["question"], doc_context)
+        answer = self.answer_with_context_chain(state["question"], doc_context, state["chat_history"])
         return {"answer_with_retrieve": answer}
 
-    def answer_without_context_chain(self, question: str):
+    def answer_without_context_chain(self, question: str, chat_history: list[tuple[str, str]]):
         prompt = """
                 Ты — интеллектуальный ассистент, который анализирует вопрос и формулирует точный, информативный ответ на вопрос пользователя.\n
                 Инстуркции:\n
@@ -301,14 +315,15 @@ class RagAgent:
         system_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", prompt),
+                MessagesPlaceholder("history"),
                 ("human", "Вопрос: {question}")
             ]
         )
         chain = system_prompt | self.model | StrOutputParser()
-        return chain.invoke({"question": question})
+        return chain.invoke({"history": chat_history, "question": question})
 
     def answer_without_context(self, state: GraphState):
-        answer = self.answer_without_context_chain(state["question"])
+        answer = self.answer_without_context_chain(state["question"], state["chat_history"])
         answer = self._delete_special_symbols(answer)
         # print("------answer_without_context------", answer)
         return {"answer_without_retrieve": True, "answer": answer}
@@ -351,6 +366,7 @@ class RagAgent:
         system_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", prompt),
+                MessagesPlaceholder("history"),
                 ("human", "Вопрос: {question}")
             ]
         )
@@ -358,9 +374,9 @@ class RagAgent:
         chain = system_prompt | self.model | StrOutputParser() | RunnablePassthrough(
             lambda x: print("ответ на корректность", x))
         return chain.invoke(
-            {"retrieve_answer": retrieve_answer, "question": question})
+            {"history": state["chat_history"], "retrieve_answer": retrieve_answer, "question": question})
 
-    def correct_answer_chain(self, question: str, answer: str):
+    def correct_answer_chain(self, question: str, answer: str, chat_history: list[tuple[str, str]]):
         prompt = """
         Ты - эксперт-рекдактор задача которого - исправить ошибки в ответе языковой модели и внести изменения\n
         Тебе поступает ответ языковой модели в который нужны внести изменения\n
@@ -372,16 +388,17 @@ class RagAgent:
         final_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", prompt),
+                MessagesPlaceholder("history"),
                 ("human", "Вовпрос пользователя: {question}")
             ]
         )
         chain = final_prompt | self.model | StrOutputParser()
-        return chain.invoke({"question": question, "answer": answer})
+        return chain.invoke({"history": chat_history, "question": question, "answer": answer})
 
     def corrective_answer(self, state: GraphState):
         answer = state["answer_with_retrieve"]
         question = state["question"]
-        correct_answer = self.correct_answer_chain(question, answer)
+        correct_answer = self.correct_answer_chain(question, answer, state["chat_history"])
         return {"answer_with_retrieve": correct_answer}
 
     def _delete_special_symbols(self, answer: str) -> str:
