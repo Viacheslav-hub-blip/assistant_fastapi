@@ -160,8 +160,7 @@ class RagAgent:
         """Ищет документы и ограничивает выборку документами со сходством <= 1.3(наиболее релевантные)"""
         print(state["question_with_additions"])
         print("belongs_to", state["belongs_to"])
-        retrieved_documents: List[Document] = self.retriever.get_relevant_documents(state["workspace_id"],
-                                                                                    state["question_with_additions"],
+        retrieved_documents: List[Document] = self.retriever.get_relevant_documents(state["question_with_additions"],
                                                                                     state["belongs_to"],
                                                                                     )
         for d in retrieved_documents:

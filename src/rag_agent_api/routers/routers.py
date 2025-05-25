@@ -4,7 +4,7 @@ from src.rag_agent_api.config import TEMP_DOWNLOADS
 # FastApi
 from fastapi import APIRouter, UploadFile, File, Form
 # SERVICES
-from src.rag_agent_api.services.retriever_service import RetrieverSrvice
+from src.rag_agent_api.services.retriever_service import VectorDBManager
 from src.rag_agent_api.services.database.documents_saver_service import DocumentsSaverService
 from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 from src.rag_agent_api.services.database.documents_remove_service import DocumentsRemoveService
@@ -49,7 +49,7 @@ async def format_agent_answer(answer) -> AgentAnswer:
 
 async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str,
                         chat_history: list[Message]) -> AgentAnswer:
-    retriever = RetrieverSrvice.get_or_create_retriever(user_id, workspace_id)
+    retriever = VectorDBManager.get_or_create_retriever(user_id, workspace_id)
     rag_agent = RagAgent(model=model_for_answer, retriever=retriever)
     chat_history = [(mess.type, mess.message) for mess in chat_history]
     print("----------CHAT HISTORY----------", chat_history)
@@ -82,7 +82,7 @@ async def _get_doc_content(file_path: str):
 async def _save_doc_content(content: str, user_id: int,
                             file_name: str, work_space_id: int) -> (str, str):
     """Сохраняет извлеченную информацию"""
-    retriever = RetrieverSrvice.get_or_create_retriever(user_id, work_space_id)
+    retriever = VectorDBManager.get_or_create_retriever(user_id, work_space_id)
     vecstore_store_service = VecStoreService(llm_model_service, retriever, content, file_name, user_id, work_space_id)
     doc_id, summarize_content = vecstore_store_service.save_docs_and_add_in_retriever()
     return doc_id, summarize_content
