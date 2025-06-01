@@ -1,5 +1,6 @@
-from src.database.repositories import workSpaceCRUDRepository
 from typing import NamedTuple, List
+
+from src.database.repositories import workSpaceCRUDRepository
 
 
 class WorkSpace(NamedTuple):
@@ -17,3 +18,9 @@ class WorkspacesService:
     @staticmethod
     def create_workspace(user_id: int, workspace_name: str) -> int:
         return workSpaceCRUDRepository.create_workspace(user_id, workspace_name)
+
+    @staticmethod
+    def check_exist_workspace(user_id: int, workspace_name: str) -> bool:
+        if workSpaceCRUDRepository.select_workspace(user_id, workspace_name):
+            return True
+        return False

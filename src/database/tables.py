@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import declarative_base
+
 from src.database.connection import engine
 
 Base = declarative_base()
@@ -63,6 +64,18 @@ class Chunks(Base):
 
     def __repr__(self):
         return f"{self.user_id}, {self.workspace_id}, {self.source_doc_name}, {self.summary_content}"
+
+
+class WorkspacesMarket(Base):
+    __tablename__ = "workspaces_market"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    source_workspace_id = Column(Integer, ForeignKey('workspace.id'))
+    workspace_name = Column(String)
+    workspace_description = Column(String)
+
+    def __repr__(self):
+        return f"{self.user_id}, {self.source_workspace_id}, {self.workspace_name}, {self.workspace_description}"
 
 
 Base.metadata.create_all(engine)

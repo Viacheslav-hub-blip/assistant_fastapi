@@ -3,7 +3,7 @@ import chromadb
 from langchain_core.vectorstores import VectorStore
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
-from src.rag_agent_api.embeddings_init import embeddings
+from src.rag_agent_api.embeddings_init import embeddings, embedding_function
 from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 from src.rag_agent_api.config import VEC_BASES
 
@@ -72,7 +72,10 @@ class VectorDBManager:
         source_collection = source_client.get_collection(source_collection_name)
         source_data = source_collection.get()
 
-        target_collection = target_client.get_or_create_collection(target_collection_name)
+        target_collection = target_client.get_or_create_collection(
+            target_collection_name,
+            embedding_function=embedding_function
+        )
         target_collection.add(
             ids=source_data["ids"],
             documents=source_data["documents"],

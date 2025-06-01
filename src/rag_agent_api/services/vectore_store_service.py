@@ -53,7 +53,7 @@ class VecStoreService:
 
     def add_metadata_to_chunks(self, chunks) -> list[Document]:
         return [
-            Document(page_content=chunk, metadata={"source_doc_name": self.file_name, "doc_number": i}) for i, chunk in
+            Document(page_content=chunk, metadata={"belongs_to": self.file_name, "doc_number": i}) for i, chunk in
             enumerate(chunks)
         ]
 
@@ -91,7 +91,7 @@ class VecStoreService:
         chunks = self.get_chunks()
         chunks_with_metadata = self.add_metadata_to_chunks(chunks)
         summarized_chunks = self.get_summarize_chunks(chunks)
-        ids_chunks = DocumentsSaverService.save_chunk(self.user_id, self.work_space_id, chunks_with_metadata)
+        ids_chunks = DocumentsSaverService.save_chunks(self.user_id, self.work_space_id, chunks_with_metadata)
         summarized_chunks_with_metadata = self.add_metadata_to_summarized(summarized_chunks, ids_chunks)
         self.retriever.vectorstore.add_documents(summarized_chunks_with_metadata)
         return self.file_name, self.super_brief_content(

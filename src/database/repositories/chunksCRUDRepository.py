@@ -21,3 +21,11 @@ def select_source_chunk(user_id: int, workspace_id: int, belongs_to: str, doc_nu
         if len(res) != 0:
             return res[0]
         return None
+
+
+def select_all_chunks_from_workspace(user_id: int, workspace_id: int) -> list[Chunks]:
+    with session as s:
+        res = s.query(Chunks).filter(
+            and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id)
+        ).all()
+    return res
