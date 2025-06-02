@@ -11,6 +11,7 @@ class Users(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String)
+    login = Column(String)
     password = Column(String)
 
     def __repr__(self):

@@ -1,10 +1,13 @@
 from fastapi import FastAPI
-from src.rag_agent_api.routers.routers import router
 from starlette.middleware.cors import CORSMiddleware
+
+from src.rag_agent_api.routers.routers import router
+from src.users_api.routers import router as user_router
 
 app = FastAPI()
 
 app.include_router(router)
+app.include_router(user_router)
 
 origins = [
     "http://localhost:5173",
@@ -22,6 +25,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
-#uvicorn src.rag_agent_api.main:app --use-colors --log-level debug --reload
+# uvicorn src.main:app --use-colors --log-level debug --reload
