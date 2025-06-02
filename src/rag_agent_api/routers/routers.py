@@ -41,8 +41,9 @@ class AgentAnswer(NamedTuple):
 
 async def format_agent_answer(answer) -> AgentAnswer:
     used_docs_names, used_docs = [], []
+    print("answer in format", answer)
     question, generation = answer["question"], answer["answer"]
-    if answer["used_docs"]:
+    if answer.get("used_docs", None):
         used_docs_names = answer["used_docs"]
         used_docs = [doc.page_content for doc in answer["neighboring_docs"]]
     return AgentAnswer(generation, used_docs_names, used_docs)
@@ -50,10 +51,12 @@ async def format_agent_answer(answer) -> AgentAnswer:
 
 async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str,
                         chat_history: list[Message]) -> AgentAnswer:
+    print("in _invoke_agent", user_id, workspace_id, belongs_to)
     retriever = VectorDBManager.get_or_create_retriever(user_id, workspace_id)
     rag_agent = RagAgent(model=model_for_answer, retriever=retriever)
     chat_history = [(mess.type, mess.message) for mess in chat_history]
     print("----------CHAT HISTORY----------", chat_history)
+
     result = rag_agent().invoke(
         {"question": question, "user_id": user_id, "workspace_id": workspace_id, "belongs_to": belongs_to,
          "chat_history": chat_history})
@@ -73,10 +76,13 @@ async def _save_file_local(user_id: int, work_space_id: int, file) -> str:
         file.file.close()
 
 
-async def _get_doc_content(file_path: str):
+async def _get_doc_content(file_path: str) -> str | None:
     file_reader = PDFReader(file_path)
     content = file_reader.get_cleaned_content()
+
     print("content length:", len(content))
+    if len(content) > 15000:
+        return None
     return content
 
 
@@ -91,20 +97,25 @@ async def _save_doc_content(content: str, user_id: int,
 
 @router.get("/")
 async def get_answer(question: str, user_id: int, workspace_id: int, belongs_to: str = None) -> AgentAnswer:
+    print(question, user_id, workspace_id)
     MessagesService.insert_message(user_id, workspace_id, question, "user")
     chat_history = MessagesService.get_user_messages(user_id, workspace_id)
+    belongs_to = belongs_to if belongs_to != 'null' else None
     answer = await _invoke_agent(question, user_id, workspace_id, belongs_to, chat_history)
     MessagesService.insert_message(user_id, workspace_id, answer.answer, "assistant")
     return answer
 
 
 @router.post("/load_file")
-async def load_file(file: UploadFile = File(...), user_id: int = Form(...), work_space_id: int = Form(...)):
-    destination = await _save_file_local(user_id, work_space_id, file)
+async def load_file(file: UploadFile = File(...), user_id: int = Form(...), workspace_id: int = Form(...)) -> dict[
+    str, Any]:
+    destination = await _save_file_local(user_id, workspace_id, file)
     content = await _get_doc_content(destination)
-    doc_id, summarize_content = await _save_doc_content(content, user_id, file.filename, work_space_id)
-    DocumentsSaverService.save_file(user_id, work_space_id, file.filename, summarize_content)
-    return {"doc_id": doc_id, "summary": summarize_content}
+    if content:
+        doc_id, summarize_content = await _save_doc_content(content, user_id, file.filename, workspace_id)
+        DocumentsSaverService.save_file(user_id, workspace_id, file.filename, summarize_content)
+        return {"satus": 200, "doc_id": doc_id, "summary": summarize_content}
+    return {"satus": 400, "error": "слишком большой файл"}
 
 
 @router.get("/my_files")
@@ -116,17 +127,32 @@ async def my_files(user_id: int, workspace_id: int) -> list[DocWithIdAndSummary]
 
 
 @router.get("/delete_all_files")
-async def delete_all_files(user_id: int, workspace_id: int):
+async def delete_all_files(user_id: int, workspace_id: int) -> str:
     VecStoreService.clear_vector_stores(user_id, workspace_id)
     DocumentsRemoveService.delete_all_files_in_workspace(user_id, workspace_id)
+    DocumentsRemoveService.delete_all_chunks_in_workspace(user_id, workspace_id)
     return "Загруженные документы удалены"
 
 
+@router.get("/delete_workspace")
+async def delete_workspace(user_id: int, workspace_id: int) -> str:
+    await delete_all_files(user_id, workspace_id)
+    MessagesService.delete_messages(user_id, workspace_id)
+    WorkspacesService.delete_work_space(user_id, workspace_id)
+    return "Рабочее пространство удалено"
+
+
+@router.get("/clear_chat_history")
+async def clear_chat_history(user_id: int, workspace_id: int) -> dict[str, int]:
+    MessagesService.delete_messages(user_id, workspace_id)
+    return {"status": 200}
+
+
 @router.get("/delete_file")
-async def delete_file(user_id: int, workspace_id: int, file_id: int, file_name: str):
+async def delete_file(user_id: int, workspace_id: int, file_id: int, file_name: str) -> dict[str, Any]:
     DocumentsRemoveService.delete_document_by_id(user_id, workspace_id, file_id)
     VecStoreService.delete_file_from_vecstore(user_id, workspace_id, file_name)
-    return "Файл удален"
+    return {"status": 200}
 
 
 @router.get('/user_workspaces')
@@ -148,8 +174,8 @@ async def get_user_messages(user_id: int, workspace_id: int) -> list[dict[str, A
 
 @router.post("/copy_workspace")
 async def copy_workspace(source_user_id: int, source_workspace_id: int, target_user_id: int,
-                         target_workspace_name: str) -> dict[str, str]:
-    if WorkspacesService.check_exist_workspace(target_user_id, target_workspace_name):
+                         target_workspace_name: str) -> dict[str, Any]:
+    if not WorkspacesService.check_exist_workspace(target_user_id, target_workspace_name):
         target_workspace_id = WorkspacesService.create_workspace(target_user_id, target_workspace_name)
         VectorDBManager.copy_collection(source_user_id, source_workspace_id, target_user_id, target_workspace_id)
         all_chunks = DocumentsGetterService.get_all_chunks_from_workspace(source_user_id, source_workspace_id)
@@ -172,14 +198,15 @@ async def load_workspace_to_market(
         source_workspace_id: int,
         workspace_name: str,
         workspace_description: str
-) -> dict[str, str]:
-    space_id = WorkspaceMarketService.insert_workspace_in_market(
-        user_id, source_workspace_id, workspace_name, workspace_description
-    )
+) -> dict[str, int]:
+    if not WorkspaceMarketService.select_workspace_by_user_id_and_name(user_id, workspace_name):
+        space_id = WorkspaceMarketService.insert_workspace_in_market(
+            user_id, source_workspace_id, workspace_name, workspace_description
+        )
 
-    if isinstance(space_id, int):
-        return {"status": "sucess"}
-    return {"status": "fail"}
+        if isinstance(space_id, int):
+            return {"status": 200}
+    return {"status": 404}
 
 
 @router.get("/workspaces_in_market")

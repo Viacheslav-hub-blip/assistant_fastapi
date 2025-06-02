@@ -24,3 +24,7 @@ class WorkspacesService:
         if workSpaceCRUDRepository.select_workspace(user_id, workspace_name):
             return True
         return False
+
+    @staticmethod
+    def delete_work_space(user_id: int, workspace_id: int):
+        workSpaceCRUDRepository.delete_workspace(user_id, workspace_id)

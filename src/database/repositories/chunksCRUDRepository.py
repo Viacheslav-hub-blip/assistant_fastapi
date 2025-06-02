@@ -29,3 +29,9 @@ def select_all_chunks_from_workspace(user_id: int, workspace_id: int) -> list[Ch
             and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id)
         ).all()
     return res
+
+
+def delete_all_chunks_in_workspace(user_id: int, workspace_id: int) -> None:
+    with session as s:
+        s.query(Chunks).filter(and_(Chunks.user_id == user_id, Chunks.workspace_id == workspace_id)).delete()
+        s.commit()

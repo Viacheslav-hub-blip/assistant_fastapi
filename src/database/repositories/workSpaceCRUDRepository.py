@@ -21,3 +21,9 @@ def select_all_by_user_id(user_id: int) -> List[WorkSpace]:
 def select_workspace(user_id: int, workspace_name: str) -> WorkSpace | None:
     with session as s:
         return s.query(WorkSpace).filter(WorkSpace.user_id == user_id, WorkSpace.name == workspace_name).first()
+
+
+def delete_workspace(user_id: int, workspace_id: int) -> None:
+    with session as s:
+        s.query(WorkSpace).filter(WorkSpace.user_id == user_id, WorkSpace.id == workspace_id).delete()
+        s.commit()

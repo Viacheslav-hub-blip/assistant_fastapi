@@ -25,3 +25,9 @@ def insert_worksapce(
 def select_all_worksapces() -> list[WorkspacesMarket]:
     with session as s:
         return s.query(WorkspacesMarket).all()
+
+
+def select_workspace_by_user_id_and_name(user_id: int, workspace_name: str) -> WorkspacesMarket | None:
+    with session as s:
+        return s.query(WorkspacesMarket).filter(WorkspacesMarket.user_id == user_id,
+                                                WorkspacesMarket.workspace_name == workspace_name).first()
