@@ -421,8 +421,8 @@ class RagAgent:
 
     def final_answer(self, state: GraphState):
         retrieve_answer = state["answer_with_retrieve"]
-        final_answer = self._delete_special_symbols(retrieve_answer)
-        return {"answer_without_retrieve": False, "answer": final_answer}
+        # final_answer = self._delete_special_symbols(retrieve_answer)
+        return {"answer_without_retrieve": False, "answer": retrieve_answer}
 
     def add_source_docs_names(self, state: GraphState):
         documents: list[Document] = state["neighboring_docs"]

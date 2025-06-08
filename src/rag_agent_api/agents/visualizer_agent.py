@@ -60,74 +60,46 @@ class VisualizerAgent:
         return "unknow"
 
     def handle_table_creator(self, state: VisualizerState):
-        llm_with_tools = self.model.bind_tools([table_creator])
-        examples = [
-            AIMessage(
-                content="Температура: 23.5, 18.2, 25.0 Влажность: 65, 72, 58 Давление: 101, 100, 101"
-            ),
-            HumanMessage(
-                "Представь в иде таблицы"
-            ),
-            AIMessage(
-                "",
-                name="example_assistant",
-                tool_calls=[
-                    {"name": "table creator tool",
-                     "args": {"index": "0, 1, 2", "columns_names": "Температура, Влажность, Давление",
-                              "data": "23.5, 18.2, 25.0; 65, 72, 58; 101, 100, 101"},
-                     "id": "1"
-                     },
-                ]
-            ),
-            ToolMessage("", tool_call_id="1"),
 
-            HumanMessage(
-                """
-                Построй таблицу по моим данные о ценах на продукты
-
-                -100 молоко
-                -130 хлеб
-                -50 чипсы
-                """
-            ),
-            AIMessage(
-                "",
-                name="example_assistant",
-                tool_calls=[
-                    {"name": "table creator tool",
-                     "args": {"index": "0, 1, 2", "columns_names": "продукт, цена",
-                              "data": "молоко, 100; хлеб, 130; чипсы, 50;"},
-                     "id": "2"
-                     },
-                ]
-            ),
-            ToolMessage("", tool_call_id="2")
-
-        ]
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", """
-                Ты  - умный ассистент, который помогает пользователям визулизировать данные с помощью таблиц. 
-                Ниже приведены примеры использования инструента и история сообщений с пользователем. 
-                Твоя задача: выдели данные из истории собщений для построение таблицы.
-                Примеры:
+                Ты — специализированный ассистент для генерации таблиц в формате Markdown. Твоя единственная задача — преобразовывать любые предоставленные данные в корректные таблицы Markdown.
+
+                Строго соблюдай следующие правила:
+                1. Формат вывода: ТОЛЬКО таблица Markdown (никакого пояснительного текста, заголовков или комментариев)
+                2. Требования к таблице:
+                   - Всегда добавляй заголовки столбцов
+                   - Подбирай оптимальное количество столбцов (2-6)
+                   - Выравнивай текст по левому краю
+                   - Используй минимально необходимое количество строк
+                3. Обработка данных:
+                   - Если в данных есть числовые значения — помещай их в отдельный столбец
+                   - Группируй однотипные данные
+                   - Сохраняй точность исходных данных
+                4. Валидация:
+                   - Проверяй что таблица имеет корректный синтаксис Markdown
+                   - Убедись что разделители столбцов (|) расставлены правильно
+                   - Сохраняй пустые ячейки если данные отсутствуют
+                
+                Пример корректного вывода:
+                | Категория       | Количество | Процент |
+                |-----------------|------------|---------|
+                | Пользователи    | 1,240      | 62%     |
+                | Администраторы  | 76         | 3.8%    |
+                | Гости          | 684        | 34.2%   |
+                
+                Никогда не отклоняйся от этого формата. Всегда отвечай только таблицей Markdown без каких-либо дополнительных текстовых пояснений.
                 """),
-                *examples,
                 MessagesPlaceholder("history"),
                 ("human", "{question}")
             ]
         )
 
-        chain = prompt | llm_with_tools
+        chain = prompt | self.model | StrOutputParser()
         answer = chain.invoke({"history": state["chat_history"], "question": state["user_input"]})
 
-        for tool_call in answer.tool_calls:
-            try:
-                output = table_creator.invoke(tool_call["args"])
-                return {"isComplete": True, "answer": output}
-            except Exception as e:
-                print("НЕ УДАЛОСЬ ПОСТРОИТЬ ТАБЛИЦУ", e)
-                return {"isComplete": False, "answer": str(e)}
+        return {"isComplete": True, "answer": answer}
 
     def handle_unknow(self, state: VisualizerState):
         return {"isComplete": False, "answer": "не удалось выбрать инструмент"}
