@@ -1,11 +1,13 @@
 from typing import List, TypedDict, NamedTuple
-from langchain_core.runnables import RunnablePassthrough
+
+from langchain_core.documents import Document
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.documents import Document
+from langchain_core.runnables import RunnablePassthrough
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
+
 from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 
 
@@ -67,7 +69,8 @@ class RagAgent:
                 1.Фактическая - если в вопросе спрашивают про какие либо факты, либо если они должны содержаться в ответе\n
                 2.Аналитическая  - если для ответа на вопрос нужно провести цепочку рассуждений \n
                 3.Мнение - если в вопросе спрашивают твое (языковой модели) мнение или просят порассуждать\n
-                Отнеси вопрос к одной из категорий и ответь одним словом: Factual, Analytical, Opinion\n               
+                4. Простой вопрос - например, "привет", "как дела?", "кто ты?" и другие вопросы, связанные с тобой, как с языковой моделью и твоим состоянием          
+                Отнеси вопрос к одной из категорий и ответь одним словом: Factual, Analytical, Opinion, Simple\n     
                 """
 
         return self.simple_chain(system_prompt, question)
@@ -91,7 +94,9 @@ class RagAgent:
             return "Factual"
         elif query_strategy == "analytical":
             return "Analytical"
-        return "Opinion"
+        elif query_strategy == "opinion":
+            return "Opinion"
+        return "Simple"
 
     def factual_query_chain(self, question: str) -> str:
         system_prompt = """
@@ -158,13 +163,9 @@ class RagAgent:
 
     def retrieve_documents(self, state: GraphState):
         """Ищет документы и ограничивает выборку документами со сходством <= 1.3(наиболее релевантные)"""
-        print(state["question_with_additions"])
-        print("belongs_to", state["belongs_to"])
         retrieved_documents: List[Document] = self.retriever.get_relevant_documents(state["question_with_additions"],
                                                                                     state["belongs_to"],
                                                                                     )
-        for d in retrieved_documents:
-            print(d)
 
         return {"retrieved_documents": retrieved_documents}
 
@@ -178,7 +179,6 @@ class RagAgent:
             neighboring_numbers: list[int] = numbers_int + [n - 1 for n in numbers_int] + [n + 1 for n in numbers_int]
             unique_neighboring_numbers = sorted(set(neighboring_numbers))
             res_dict[sec] = "/".join([str(i) for i in unique_neighboring_numbers])
-        print("res_dict", res_dict)
         return res_dict
 
     def section_numbers_dict(self, retrieved_documents: list[Document]) -> dict:
@@ -226,8 +226,12 @@ class RagAgent:
         docs_with_rank_over = []
         for doc in retrieved_neighboring_docs:
             rank = self.rerank_document_chain(question, doc)
-            if int(rank) >= 3:
-                docs_with_rank_over.append(doc)
+            try:
+                if int(rank) >= 3:
+                    docs_with_rank_over.append(doc)
+            except ValueError:
+                print("Неправильная оценка", rank)
+
         return {"neighboring_docs": docs_with_rank_over}
 
     def checking_possibility_responses_chain(self, question: str, context: str):
@@ -257,7 +261,6 @@ class RagAgent:
         doc_context = "".join([doc.page_content for doc in state["neighboring_docs"]])
         if len(doc_context) != 0:
             binary_check = self.checking_possibility_responses_chain(state["question"], doc_context)
-            print("------checking_possibility_responses------", binary_check)
             if binary_check.lower() in ["yes", "да"]:
                 return "да"
             else:
@@ -267,6 +270,8 @@ class RagAgent:
     def answer_with_context_chain(self, question: str, context: str, chat_history: list[tuple[str, str]]):
         prompt = """
         Ты — интеллектуальный ассистент, который анализирует предоставленный контекст и формулирует точный, информативный ответ на вопрос пользователя.\n
+        Ты должен отвечать строго в формате Markdown 
+        
         Инстуркции:\n
         Внимательно прочитай контекст и вопрос, а также историю диалога.\n        
         Ответ должен быть:\n
@@ -274,6 +279,16 @@ class RagAgent:
         -Каждый ответ должен быть точным, правдимым и отвечать на вопрос пользователя\n
         -Основанным только на контексте и истории диалога (не добавляй внешних знаний).\n        
         -Отвечай простым языком(если в вопросе не скзаано другое) и используй вставки из найденного контекста в виде цитат.\n
+        -Ты должен отвечать строго в формате Markdown 
+        
+        Используй следующие элементы для ответа в формате Markdown :
+        - Заголовки (`##`, `###`)
+        - **Жирный текст**, *курсив*
+        - Списки (`-`, `1.`)
+        - Блоки кода (```python\n...```)
+        - Формулы LaTeX (`$$E=mc^2$$`)
+        - Mermaid-диаграммы (```mermaid\ngraph TD\n...```)
+        
         Для этого тебе стоит:\n
         -Рассуждать шаг за шагом\n
         -Продумывать свои ответы и действия\n
@@ -282,6 +297,7 @@ class RagAgent:
         Найденный контекст: {context}\n        
         Важно: проверь правильность всех фактов, которые пишешь. Проверь имена действующих лиц и соотвествие твоего ответа реальности.\n
         Не описывай все предыщие шаги о размышлениях в ответе. Дай только ответ
+        
         История диалога с пользователем:
         """
 
@@ -307,7 +323,6 @@ class RagAgent:
                 Ты — интеллектуальный ассистент, который анализирует вопрос и формулирует точный, информативный ответ на вопрос пользователя.\n
                 Инстуркции:\n
                 Ответ должен быть:\n
-                -Кратким и по делу (если не указано иное).\n
                 -Структурированным (используй списки, абзацы, выделение ключевых моментов при необходимости).\n
                 -Отвечай простым языком, используй вставки и цитаты
                 """
@@ -407,15 +422,11 @@ class RagAgent:
     def final_answer(self, state: GraphState):
         retrieve_answer = state["answer_with_retrieve"]
         final_answer = self._delete_special_symbols(retrieve_answer)
-        print("------check_answer_for_correctness------", final_answer)
         return {"answer_without_retrieve": False, "answer": final_answer}
 
     def add_source_docs_names(self, state: GraphState):
         documents: list[Document] = state["neighboring_docs"]
-        print("------------------------------")
-        print(documents)
         used_docs_names = list(set([doc.metadata["belongs_to"] for doc in documents]))
-        print("used doc anames in agent", used_docs_names)
         return {"used_docs": used_docs_names}
 
     def compile_graph(self):
@@ -441,6 +452,7 @@ class RagAgent:
                 "Factual": "factual_query_strategy",
                 "Analytical": "analytical_query_strategy",
                 "Opinion": "opinion_query_strategy",
+                "Simple": "answer_without_context"
             }
         )
 

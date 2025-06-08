@@ -3,7 +3,7 @@ from typing import NamedTuple, List, Any
 # FastApi
 from fastapi import APIRouter, UploadFile, File, Form
 
-from src.rag_agent_api.agents.rag_agent import RagAgent
+from src.rag_agent_api.agents.supervisor_agent import SuperVisor
 from src.rag_agent_api.config import TEMP_DOWNLOADS
 # AGENTS
 from src.rag_agent_api.langchain_model_init import model_for_answer
@@ -35,40 +35,51 @@ class DocWithIdAndSummary(NamedTuple):
 
 class AgentAnswer(NamedTuple):
     answer: str
+    use_web_search: bool
+    use_visualizer: bool
     used_docs_names: List[str]
     used_docs: List[str]
 
 
 async def format_agent_answer(answer) -> AgentAnswer:
     used_docs_names, used_docs = [], []
-    print("answer in format", answer)
-    question, generation = answer["question"], answer["answer"]
+    use_web_search, use_visualizer = False, False
+    question, generation = answer["user_input"], answer["answer"]
+
     if answer.get("used_docs", None):
         used_docs_names = answer["used_docs"]
-        used_docs = [doc.page_content for doc in answer["neighboring_docs"]]
-    return AgentAnswer(generation, used_docs_names, used_docs)
+        used_docs = answer["neighboring_docs"]
+    else:
+        if answer.get("use_web_search", None):
+            use_web_search = True
+        if answer.get("use_visualizer", None):
+            use_visualizer = True
+
+    return AgentAnswer(generation, use_web_search, use_visualizer, used_docs_names, used_docs)
 
 
 async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_to: str,
                         chat_history: list[Message]) -> AgentAnswer:
-    print("in _invoke_agent", user_id, workspace_id, belongs_to)
     retriever = VectorDBManager.get_or_create_retriever(user_id, workspace_id)
-    rag_agent = RagAgent(model=model_for_answer, retriever=retriever)
+    super_visor = SuperVisor(model=model_for_answer, retriever=retriever)
     chat_history = [(mess.type, mess.message) for mess in chat_history]
-    print("----------CHAT HISTORY----------", chat_history)
 
-    result = rag_agent().invoke(
-        {"question": question, "user_id": user_id, "workspace_id": workspace_id, "belongs_to": belongs_to,
-         "chat_history": chat_history})
-    return await format_agent_answer(result)
+    try:
+        result = super_visor().invoke(
+            {"user_input": question, "user_id": user_id, "workspace_id": workspace_id, "belongs_to": belongs_to,
+             "chat_history": chat_history})
+        return await format_agent_answer(result)
+    except Exception as e:
+        print("ОШИБКА ОБРАБОТКИ ЗАПРОСА", e)
+        return await format_agent_answer({"user_input": question, "answer": "произошла ошибка"})
+
 
 
 async def _save_file_local(user_id: int, work_space_id: int, file) -> str:
     try:
         contents = file.file.read()
         file_name = f"{user_id}_{work_space_id}_{file.filename}"
-        type = 'pdf'
-        destination = rf"{TEMP_DOWNLOADS}\{file_name}.{type}"
+        destination = rf"{TEMP_DOWNLOADS}\{file_name}"
         with open(destination, 'wb') as f:
             f.write(contents)
         return destination
@@ -114,8 +125,8 @@ async def load_file(file: UploadFile = File(...), user_id: int = Form(...), work
     if content:
         doc_id, summarize_content = await _save_doc_content(content, user_id, file.filename, workspace_id)
         DocumentsSaverService.save_file(user_id, workspace_id, file.filename, summarize_content)
-        return {"satus": 200, "doc_id": doc_id, "summary": summarize_content}
-    return {"satus": 400, "error": "слишком большой файл"}
+        return {"status": 200, "doc_id": doc_id, "summary": summarize_content}
+    return {"status": 400, "error": "слишком большой файл"}
 
 
 @router.get("/my_files")

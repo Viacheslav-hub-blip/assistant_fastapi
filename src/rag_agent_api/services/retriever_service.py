@@ -21,7 +21,6 @@ class CustomRetriever:
         print("search filter", search_filter)
         print("---------------------------------")
         results = self.vectorstore.similarity_search_with_score(query, filter=search_filter)
-        print("res", results)
         collection_name = self.vectorstore._collection.name
         user_id = collection_name.split('_')[1]
         enriched_docs = []

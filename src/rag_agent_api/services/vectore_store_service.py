@@ -37,7 +37,6 @@ class VecStoreService:
         Если документ всег один(его длина была слшком маленькой для разделения,он остается без изменений)
         Иначе получаем SummarizeContentAndDocs с сжатыми документами и исходными
         """
-        print("source split len", len(split_docs))
         if len(split_docs) == 1:
             return SummarizeContentAndDocs(split_docs, split_docs)
         return self.model_service.get_summarize_docs_with_questions(split_docs)

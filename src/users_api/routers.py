@@ -27,8 +27,12 @@ async def register(email: str, login: str, password: str) -> dict[str, Any]:
 @router.post("/login")
 async def login(email: str, password: str) -> dict[str, Any]:
     # получаем токен и возращаем клиенту
+    if not UserService.check_user_exists(email):
+        return {"status": 404, "message": "Неправильный логин или пароль"}
+    user = UserService.select_user_by_email(email)
+    print("user", user)
     token = user_auth.login_for_access_token(email, password)
-    return token
+    return {"status": 200, "user_id": user.id, "token": token}
 
 
 @router.get("/decode_token")
