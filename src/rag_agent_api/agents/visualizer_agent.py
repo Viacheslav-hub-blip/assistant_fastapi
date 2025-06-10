@@ -21,6 +21,16 @@ class VisualizerState(TypedDict):
     isComplete: bool
 
 
+def _prompt_creator(system_prompt) -> ChatPromptTemplate:
+    return ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            MessagesPlaceholder("history"),
+            ("human", "{question}")
+        ]
+    )
+
+
 class VisualizerAgent:
     def __init__(self, model: BaseChatModel):
         self.model = model
@@ -28,14 +38,7 @@ class VisualizerAgent:
         self.app = self.compile_graph()
 
     def choose_tool(self, state: VisualizerState):
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", choose_tool_prompt),
-                MessagesPlaceholder("history"),
-                ("human", "{question}")
-            ]
-        )
-        chain = prompt | self.model | StrOutputParser()
+        chain = _prompt_creator(choose_tool_prompt) | self.model | StrOutputParser()
         ans = chain.invoke({"history": state["chat_history"], "question": state["user_input"]})
         return {"answer_to_route": ans}
 
@@ -45,15 +48,7 @@ class VisualizerAgent:
         return "unknow"
 
     def handle_table_creator(self, state: VisualizerState):
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", table_create_prompt),
-                MessagesPlaceholder("history"),
-                ("human", "{question}")
-            ]
-        )
-
-        chain = prompt | self.model | StrOutputParser()
+        chain = _prompt_creator(table_create_prompt) | self.model | StrOutputParser()
         answer = chain.invoke({"history": state["chat_history"], "question": state["user_input"]})
 
         return {"isComplete": True, "answer": answer}

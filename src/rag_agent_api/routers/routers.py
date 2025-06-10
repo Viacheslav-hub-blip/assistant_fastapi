@@ -74,7 +74,6 @@ async def _invoke_agent(question: str, user_id: int, workspace_id: int, belongs_
         return await format_agent_answer({"user_input": question, "answer": "произошла ошибка"})
 
 
-
 async def _save_file_local(user_id: int, work_space_id: int, file) -> str:
     try:
         contents = file.file.read()
@@ -90,8 +89,6 @@ async def _save_file_local(user_id: int, work_space_id: int, file) -> str:
 async def _get_doc_content(file_path: str) -> str | None:
     file_reader = PDFReader(file_path)
     content = file_reader.get_cleaned_content()
-
-    print("content length:", len(content))
     if len(content) > 15000:
         return None
     return content
@@ -112,7 +109,6 @@ async def _save_doc_content(content: str, user_id: int,
 
 @router.get("/")
 async def get_answer(question: str, user_id: int, workspace_id: int, belongs_to: str = None) -> AgentAnswer:
-    print(question, user_id, workspace_id)
     MessagesService.insert_message(user_id, workspace_id, question, "user")
     chat_history = MessagesService.get_user_messages(user_id, workspace_id)
     belongs_to = belongs_to if belongs_to != 'null' else None
@@ -122,8 +118,10 @@ async def get_answer(question: str, user_id: int, workspace_id: int, belongs_to:
 
 
 @router.post("/load_file")
-async def load_file(file: UploadFile = File(...), user_id: int = Form(...), workspace_id: int = Form(...)) -> dict[
-    str, Any]:
+async def load_file(
+        file: UploadFile = File(...),
+        user_id: int = Form(...),
+        workspace_id: int = Form(...)) -> dict[str, Any]:
     destination = await _save_file_local(user_id, workspace_id, file)
     content = await _get_doc_content(destination)
     if content:
