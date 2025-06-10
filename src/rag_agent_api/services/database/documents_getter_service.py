@@ -1,5 +1,3 @@
-import chunk
-
 from src.database.repositories import chunksCRUDRepository, filesCRUDRepository
 from typing import NamedTuple
 from langchain_core.documents import Document
@@ -16,7 +14,6 @@ class File(NamedTuple):
 class DocumentsGetterService:
     @staticmethod
     def get_source_chunk(user_id: int, workspace_id: int, belongs_to: str, doc_number: str) -> Document:
-
         """Извлечение исходного фрагмента текста
         belongs_to  - название документа, к которому принадлежит краткое содержание 
         doc_number  - номер фрагмента
@@ -25,11 +22,9 @@ class DocumentsGetterService:
         """
         chunk = chunksCRUDRepository.select_source_chunk(user_id, workspace_id, belongs_to, doc_number)
         if chunk:
-            print("source chunk from db", chunk)
             return Document(page_content=chunk.summary_content,
                             metadata={"belongs_to": chunk.source_doc_name, "doc_number": chunk.doc_number})
-        else:
-            return Document(page_content="")
+        return Document(page_content="")
 
     @staticmethod
     def get_all_chunks_from_workspace(user_id: int, workspace_id: int) -> list[Document]:
@@ -46,23 +41,21 @@ class DocumentsGetterService:
         {"id": "name"}
         """
         files = filesCRUDRepository.select_all_by_user_id_and_work_space_id(user_id, workspace_id)
-        result: dict[str, str] = {}
-        for f in files:
-            result[str(f.id)] = f.file_name
+        result = {str(f.id): f.file_name for f in files}
         return result
 
     @staticmethod
     def get_files_with_summary(user_id: int, workspace_id: int) -> dict[str, str]:
-        """Возвращает загруженные файлы с их кратких содержанием """
-        {"id": "summary"}
+        """Возвращает загруженные файлы с их кратких содержанием в формате
+         {"id": "summary"}
+         """
         files = filesCRUDRepository.select_all_by_user_id_and_work_space_id(user_id, workspace_id)
-        result: dict[str, str] = {}
-        for f in files:
-            result[str(f.id)] = f.summary_content
+        result = {str(f.id): f.summary_content for f in files}
         return result
 
     @staticmethod
     def get_all_files_from_workspace(user_id: int, workspace_id: int) -> list[File]:
+        """Возвращает все файлы в пользовательском пространстве пользователя"""
         files = filesCRUDRepository.select_all_by_user_id_and_work_space_id(user_id, workspace_id)
         return [File(file.user_id, file.workspace_id, file.file_name, file.load_date, file.summary_content) for file in
                 files]

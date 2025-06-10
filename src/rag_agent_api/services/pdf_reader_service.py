@@ -8,10 +8,7 @@ class PDFReader:
 
     def get_content(self) -> list[str]:
         document = pymupdf.open(self.file_path)
-        content = []
-        for page in document:
-            text = page.get_text()
-            content.append(text)
+        content = [page.get_text() for page in document]
         return content
 
     def get_cleaned_content(self) -> str:

@@ -98,12 +98,16 @@ async def _get_doc_content(file_path: str) -> str | None:
 
 
 async def _save_doc_content(content: str, user_id: int,
-                            file_name: str, work_space_id: int) -> (str, str):
+                            file_name: str, work_space_id: int) -> tuple[str, str] | Exception:
     """Сохраняет извлеченную информацию"""
     retriever = VectorDBManager.get_or_create_retriever(user_id, work_space_id)
     vecstore_store_service = VecStoreService(llm_model_service, retriever, content, file_name, user_id, work_space_id)
-    doc_id, summarize_content = vecstore_store_service.save_docs_and_add_in_retriever()
-    return doc_id, summarize_content
+
+    try:
+        doc_id, summarize_content = vecstore_store_service.save_docs_and_add_in_retriever()
+        return doc_id, summarize_content
+    except Exception as e:
+        return e
 
 
 @router.get("/")
@@ -123,9 +127,12 @@ async def load_file(file: UploadFile = File(...), user_id: int = Form(...), work
     destination = await _save_file_local(user_id, workspace_id, file)
     content = await _get_doc_content(destination)
     if content:
-        doc_id, summarize_content = await _save_doc_content(content, user_id, file.filename, workspace_id)
-        DocumentsSaverService.save_file(user_id, workspace_id, file.filename, summarize_content)
-        return {"status": 200, "doc_id": doc_id, "summary": summarize_content}
+        try:
+            doc_id, summarize_content = await _save_doc_content(content, user_id, file.filename, workspace_id)
+            DocumentsSaverService.save_file(user_id, workspace_id, file.filename, summarize_content)
+            return {"status": 200, "doc_id": doc_id, "summary": summarize_content}
+        except Exception as e:
+            return {"status": 400, "error": str(e)}
     return {"status": 400, "error": "слишком большой файл"}
 
 
@@ -149,7 +156,7 @@ async def delete_all_files(user_id: int, workspace_id: int) -> str:
 async def delete_workspace(user_id: int, workspace_id: int) -> str:
     await delete_all_files(user_id, workspace_id)
     MessagesService.delete_messages(user_id, workspace_id)
-    WorkspacesService.delete_work_space(user_id, workspace_id)
+    WorkspacesService.delete_workspace(user_id, workspace_id)
     return "Рабочее пространство удалено"
 
 
@@ -161,7 +168,7 @@ async def clear_chat_history(user_id: int, workspace_id: int) -> dict[str, int]:
 
 @router.get("/delete_file")
 async def delete_file(user_id: int, workspace_id: int, file_id: int, file_name: str) -> dict[str, Any]:
-    DocumentsRemoveService.delete_document_by_id(user_id, workspace_id, file_id)
+    DocumentsRemoveService.delete_file_by_id(user_id, workspace_id, file_id)
     VecStoreService.delete_file_from_vecstore(user_id, workspace_id, file_name)
     return {"status": 200}
 
@@ -222,5 +229,5 @@ async def load_workspace_to_market(
 
 @router.get("/workspaces_in_market")
 async def get_workspaces_in_market():
-    dict = [workspace._asdict() for workspace in WorkspaceMarketService.select_all_workspaces_inmarket()]
+    dict = [workspace._asdict() for workspace in WorkspaceMarketService.select_all_workspaces_in_market()]
     return dict

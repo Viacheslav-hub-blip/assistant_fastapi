@@ -18,6 +18,7 @@ class File(NamedTuple):
 class DocumentsSaverService:
     @staticmethod
     def save_chunks(user_id: int, work_space_id: int, documents: List[Document]) -> list[int]:
+        """Сохраняет фрагменты и возвращает id сорхраненных фрагментов"""
         ids = []
         for doc in documents:
             chunk = Chunks(
@@ -34,6 +35,7 @@ class DocumentsSaverService:
     @staticmethod
     def save_file(user_id: int, work_space_id: int, file_name: str, summary_content: str,
                   load_date: Optional[str] = None) -> None:
+        """Сохраняет файл"""
         file = Files(
             user_id=user_id,
             workspace_id=work_space_id,
@@ -45,6 +47,7 @@ class DocumentsSaverService:
 
     @staticmethod
     def save_many_files(user_id: int, workspace_id: int, files: list[File]) -> None:
+        """Сохраняет список файлов"""
         for file in files:
             DocumentsSaverService.save_file(
                 user_id,

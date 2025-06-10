@@ -1,13 +1,14 @@
 import re
 from typing import List, NamedTuple
-from langchain.schema.document import Document
-import chromadb
-from src.rag_agent_api.services.retriever_service import CustomRetriever
-from src.rag_agent_api.services.llm_model_service import LLMModelService, SummarizeContentAndDocs
-from src.rag_agent_api.services.database.documents_saver_service import DocumentsSaverService
 
-from src.rag_agent_api.services.text_splitter_service import TextSplitterService
+import chromadb
+from langchain.schema.document import Document
+
 from src.rag_agent_api.config import VEC_BASES
+from src.rag_agent_api.services.database.documents_saver_service import DocumentsSaverService
+from src.rag_agent_api.services.llm_model_service import LLMModelService, SummarizeContentAndDocs
+from src.rag_agent_api.services.retriever_service import CustomRetriever
+from src.rag_agent_api.services.text_splitter_service import TextSplitterService
 
 
 class SummDocsWithSourceAndIds(NamedTuple):
@@ -46,9 +47,7 @@ class VecStoreService:
         return source_split_documents
 
     def get_summarize_chunks(self, chunks: list[str]) -> list[str]:
-        summarized_docs: list[str] = [sum for sum in
-                                      self._get_summary_doc_content(chunks).summary_texts]
-        return summarized_docs
+        return [sum for sum in self._get_summary_doc_content(chunks).summary_texts]
 
     def add_metadata_to_chunks(self, chunks) -> list[Document]:
         return [
@@ -57,11 +56,16 @@ class VecStoreService:
         ]
 
     def add_metadata_to_summarized(self, summarized_chunks: list[str], ids_chunks: list[int]) -> list[Document]:
-        return [Document(page_content=sum,
-                         metadata={"doc_id": ids_chunks[i], "workspace_id": self.work_space_id,
-                                   "belongs_to": self.file_name, "doc_number": i}) for i, sum
-                in
-                enumerate(summarized_chunks)]
+        return [
+            Document(
+                page_content=sum,
+                metadata={
+                    "doc_id": ids_chunks[i],
+                    "workspace_id": self.work_space_id,
+                    "belongs_to": self.file_name,
+                    "doc_number": i})
+            for i, sum in enumerate(summarized_chunks)
+        ]
 
     def get_documents_without_add_questions(self, documents: list[Document]) -> list[Document]:
         """Удаляет из сжатых текстов дополнительные вопросы, которые были добавлены перед векторизацией"""
@@ -76,25 +80,27 @@ class VecStoreService:
             return 70
         elif 800 < len_context < 1600:
             return 100
-        else:
-            return 120
+        return 120
 
-    def super_brief_content(self, documents: list[Document]) -> str:
+    def super_brief_content(self, documents: list[Document]) -> str | Exception:
         documents_content = [doc.page_content for doc in documents]
         context = "\n".join(documents_content)
         if len(context) <= 500:
             return context
         return self.model_service.get_super_brief_content(context, self._define_brief_max_word(context))
 
-    def save_docs_and_add_in_retriever(self) -> (str, str):
+    def save_docs_and_add_in_retriever(self) -> tuple[str, str] | Exception:
         chunks = self.get_chunks()
         chunks_with_metadata = self.add_metadata_to_chunks(chunks)
         summarized_chunks = self.get_summarize_chunks(chunks)
         ids_chunks = DocumentsSaverService.save_chunks(self.user_id, self.work_space_id, chunks_with_metadata)
         summarized_chunks_with_metadata = self.add_metadata_to_summarized(summarized_chunks, ids_chunks)
         self.retriever.vectorstore.add_documents(summarized_chunks_with_metadata)
-        return self.file_name, self.super_brief_content(
+        super_brief_content = self.super_brief_content(
             self.get_documents_without_add_questions(summarized_chunks_with_metadata))
+        if super_brief_content:
+            return self.file_name, super_brief_content
+        return super_brief_content
 
     @staticmethod
     def clear_vector_stores(user_id: int, workspace_id: int):

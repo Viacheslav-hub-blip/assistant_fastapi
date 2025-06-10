@@ -16,12 +16,7 @@ class CustomRetriever:
 
     def get_relevant_documents(self, query: str, belongs_to: Optional[str] = None) -> list[Document]:
         search_filter = {"belongs_to": belongs_to} if belongs_to else None
-        print("---------------------------------")
-        print("count elemets", self.vectorstore._collection.count())
-        print("search filter", search_filter)
-        print("---------------------------------")
         results = self.vectorstore.similarity_search_with_score(query, filter=search_filter)
-        print("retrieve results", results)
         collection_name = self.vectorstore._collection.name
         user_id = collection_name.split('_')[1]
         enriched_docs = []
@@ -29,9 +24,6 @@ class CustomRetriever:
             doc.metadata["score"] = score
             doc.metadata["source_chunk_content"] = self._get_source_chunk(int(user_id), doc.metadata)
             enriched_docs.append(doc)
-        print("---------------------------------")
-        print("RETRIEVED DOCS", enriched_docs)
-        print("---------------------------------")
         return enriched_docs
 
     def _get_source_chunk(self, user_id: int, metadata: dict) -> str:
@@ -49,12 +41,9 @@ class VectorDBManager:
     def get_or_create_retriever(user_id: int, workspace_id: int):
         collection_name = f"user_{user_id}_{workspace_id}"
         client = chromadb.PersistentClient(path=rf"{VEC_BASES}/chroma_db_{user_id}")
-        print("coll name", collection_name)
         if collection_name in [name for name in client.list_collections()]:
-            print("get collection")
             collection = client.get_collection(collection_name)
         else:
-            print("create collection")
             collection = client.create_collection(collection_name)
 
         vec_store = Chroma(
@@ -89,7 +78,6 @@ class VectorDBManager:
             metadatas=source_data["metadatas"],
             embeddings=source_data["embeddings"]
         )
-        print("ВЕКТОРНАЯ БАЗА СКОПИРОВАНА")
         return True
 
     @staticmethod

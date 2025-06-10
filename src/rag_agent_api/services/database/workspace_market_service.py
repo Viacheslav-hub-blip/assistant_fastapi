@@ -1,6 +1,7 @@
 from typing import NamedTuple
 
-from src.database.repositories.workSpacesMarketCRUDRepository import insert_worksapce, select_all_worksapces, select_workspace_by_user_id_and_name
+from src.database.repositories.workSpacesMarketCRUDRepository import insert_worksapce, select_all_worksapces, \
+    select_workspace_by_user_id_and_name
 
 
 class WorkspaceMarket(NamedTuple):
@@ -21,10 +22,14 @@ class WorkspaceMarketService:
         return insert_worksapce(user_id, source_workspace_id, workspace_name, workspace_description)
 
     @staticmethod
-    def select_all_workspaces_inmarket() -> list[WorkspaceMarket]:
+    def select_all_workspaces_in_market() -> list[WorkspaceMarket]:
         spaces_in_market = select_all_worksapces()
-        return [WorkspaceMarket(space.user_id, space.source_workspace_id, space.workspace_name, space.workspace_description)
-                for space in spaces_in_market]
+        return [WorkspaceMarket(
+            space.user_id,
+            space.source_workspace_id,
+            space.workspace_name,
+            space.workspace_description)
+            for space in spaces_in_market]
 
     @staticmethod
     def select_workspace_by_user_id_and_name(user_id: int, workspace_name: str) -> WorkspaceMarket | None:

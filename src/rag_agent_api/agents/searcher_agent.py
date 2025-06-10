@@ -4,7 +4,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
-
+from src.rag_agent_api.prompts.search_agent_prompts import generate_answer_prompt
 from src.rag_agent_api.agents.tools.search_agent_tool import search_tool
 
 
@@ -27,25 +27,9 @@ class SeracherAgent:
         return {"searched_content": " ".join(searched_content)}
 
     def generate_answer(self, state: SearcherState):
-        sys_prompt = """
-        Ты  - умный ассистент, который отвечает на вопросы пользователя используя найденный контекст строго в формате Markdown.
-        Ты должен отвечать строго в формате Markdown. 
-        
-        Используй следующие элементы для ответа в формате Markdown :
-        - Заголовки (`##`, `###`)
-        - **Жирный текст**, *курсив*
-        - Списки (`-`, `1.`)
-        - Блоки кода (```python\n...```)
-        - Таблицы (`| Столбец | Описание |`)
-        - Формулы LaTeX (`$$E=mc^2$$`)
-        - Mermaid-диаграммы (```mermaid\ngraph TD\n...```)
-        
-        Найденный контекст:
-        {context}
-        """
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", sys_prompt),
+            ("system", generate_answer_prompt),
             ("human", "{user_input}")
         ])
         chain = prompt | self.model | StrOutputParser()

@@ -1,13 +1,15 @@
 from typing import TypedDict, Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
 
-from src.rag_agent_api.agents.tools.visualizer_tools import table_creator
+from src.rag_agent_api.prompts.visualizer_agent_prompts import (
+    choose_tool_prompt,
+    table_create_prompt
+)
 
 
 class VisualizerState(TypedDict):
@@ -28,69 +30,24 @@ class VisualizerAgent:
     def choose_tool(self, state: VisualizerState):
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", """
-                Ты  - умный ассистент, который помогает пользователям визуализировать данные.
-                
-                Твоя задача:
-                1. Проанализировать историю сообщений
-                2. Проанализировать запрос пользователя 
-                3. Выбрать один из доступных инструментов инструментов. Вот доступные тебе инструменты:
-                
-                table  - инструмент, который создает таблицы
-                
-                3. Вернуть одно слово - название инструмента или unknow, если ни один инструмент не подходит
-                
-                Верни только одно слово из table, unknow          
-                
-                """),
+                ("system", choose_tool_prompt),
                 MessagesPlaceholder("history"),
                 ("human", "{question}")
             ]
         )
-
         chain = prompt | self.model | StrOutputParser()
         ans = chain.invoke({"history": state["chat_history"], "question": state["user_input"]})
         return {"answer_to_route": ans}
 
     def route_tools(self, state: VisualizerState) -> Literal["table", "piechart", "unknow"]:
-        selected_tool = state["answer_to_route"]
-
-        if "table" in selected_tool:
+        if "table" in state["answer_to_route"]:
             return "table"
         return "unknow"
 
     def handle_table_creator(self, state: VisualizerState):
-
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", """
-                Ты — специализированный ассистент для генерации таблиц в формате Markdown. Твоя единственная задача — преобразовывать любые предоставленные данные в корректные таблицы Markdown.
-
-                Строго соблюдай следующие правила:
-                1. Формат вывода: ТОЛЬКО таблица Markdown (никакого пояснительного текста, заголовков или комментариев)
-                2. Требования к таблице:
-                   - Всегда добавляй заголовки столбцов
-                   - Подбирай оптимальное количество столбцов (2-6)
-                   - Выравнивай текст по левому краю
-                   - Используй минимально необходимое количество строк
-                3. Обработка данных:
-                   - Если в данных есть числовые значения — помещай их в отдельный столбец
-                   - Группируй однотипные данные
-                   - Сохраняй точность исходных данных
-                4. Валидация:
-                   - Проверяй что таблица имеет корректный синтаксис Markdown
-                   - Убедись что разделители столбцов (|) расставлены правильно
-                   - Сохраняй пустые ячейки если данные отсутствуют
-                
-                Пример корректного вывода:
-                | Категория       | Количество | Процент |
-                |-----------------|------------|---------|
-                | Пользователи    | 1,240      | 62%     |
-                | Администраторы  | 76         | 3.8%    |
-                | Гости          | 684        | 34.2%   |
-                
-                Никогда не отклоняйся от этого формата. Всегда отвечай только таблицей Markdown без каких-либо дополнительных текстовых пояснений.
-                """),
+                ("system", table_create_prompt),
                 MessagesPlaceholder("history"),
                 ("human", "{question}")
             ]
