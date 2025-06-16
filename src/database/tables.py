@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
 from sqlalchemy.orm import declarative_base
 
 from src.database.connection import engine
@@ -35,6 +35,7 @@ class Messages(Base):
     workspace_id = Column(Integer, ForeignKey('workspace.id'))
     message = Column(String)
     message_type = Column(String)
+    infavorite = Column(Boolean)
 
     def __repr__(self):
         return f"{self.id}, {self.user_id}, {self.workspace_id}, {self.message_type}"
@@ -77,6 +78,14 @@ class WorkspacesMarket(Base):
 
     def __repr__(self):
         return f"{self.user_id}, {self.source_workspace_id}, {self.workspace_name}, {self.workspace_description}"
+
+
+class FavoriteMessages(Base):
+    __tablename__ = 'favorite_answers'
+    id = Column(Integer, ForeignKey("messages.id"), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    workspace_id = Column(Integer, ForeignKey('workspace.id'))
+    text = Column(String)
 
 
 Base.metadata.create_all(engine)

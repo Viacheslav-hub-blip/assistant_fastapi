@@ -218,7 +218,7 @@ class RagAgent:
                 ("human", "Вопрос: {question}")
             ]
         )
-
+        print(state["answer_with_retrieve"])
         chain = system_prompt | self.model | StrOutputParser()
         return chain.invoke(
             {"history": state["chat_history"],
@@ -273,7 +273,6 @@ class RagAgent:
                 "Factual": "factual_query_strategy",
                 "Analytical": "analytical_query_strategy",
                 "Opinion": "opinion_query_strategy",
-                "Simple": "answer_without_context"
             }
         )
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from src.rag_agent_api.routers.routers import router
+from src.rag_agent_api.routers.main_router import router
 from src.users_api.routers import router as user_router
 
 app = FastAPI()

@@ -1,7 +1,15 @@
 from typing import Literal, NamedTuple
 
-from src.database.repositories.messagesCRUDRepository import insert_messages, select_all_by_user_id_and_work_space_id, \
+from src.database.repositories.favoriteAnswersCrudRepository import (
+    add_in_favorite,
+    delete_from_favorite,
+    select_all_favorite_messages_from_workspace
+)
+from src.database.repositories.messagesCRUDRepository import (
+    insert_messages,
+    select_all_by_user_id_and_work_space_id,
     delete_all_messages_from_workspace
+)
 from src.database.tables import Messages
 
 roles = Literal["user", "assistant", "jarvis"]
@@ -11,6 +19,11 @@ class Message(NamedTuple):
     type: str
     message: str
     source: str
+
+
+class FavoriteMessage(NamedTuple):
+    message: str
+    workspace_id: int
 
 
 class MessagesService:
@@ -33,3 +46,19 @@ class MessagesService:
     @staticmethod
     def delete_messages(user_id: int, workspace_id: int) -> None:
         delete_all_messages_from_workspace(user_id, workspace_id)
+
+    @staticmethod
+    def add_in_favorite(id: int, user_id: int, workspace_id: int, text: str) -> None:
+        add_in_favorite(id, user_id, workspace_id, text)
+
+    @staticmethod
+    def delete_from_favorites(id: int, user_id: int, workspace_id: int) -> None:
+        delete_from_favorite(id, user_id, workspace_id)
+
+    @staticmethod
+    def select_all_favorite_messages_from_workspace(
+            user_id: int,
+            workspace_id: int
+    ) -> list[FavoriteMessage]:
+        messages = select_all_favorite_messages_from_workspace(user_id, workspace_id)
+        return [FavoriteMessage(mes.text, mes.workspace_id) for mes in messages]
