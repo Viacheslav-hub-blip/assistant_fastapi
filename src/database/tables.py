@@ -82,9 +82,9 @@ class WorkspacesMarket(Base):
 
 class FavoriteMessages(Base):
     __tablename__ = 'favorite_answers'
-    id = Column(Integer, ForeignKey("messages.id"), primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'))
-    workspace_id = Column(Integer, ForeignKey('workspace.id'))
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer)
+    workspace_id = Column(Integer)
     text = Column(String)
 
 

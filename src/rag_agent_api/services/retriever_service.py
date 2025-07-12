@@ -15,6 +15,7 @@ class CustomRetriever:
         self.vectorstore = vectorstore
 
     def get_relevant_documents(self, query: str, belongs_to: Optional[str] = None) -> list[Document]:
+        print("===================get docs++++++++++++++++++")
         search_filter = {"belongs_to": belongs_to} if belongs_to else None
         results = self.vectorstore.similarity_search_with_score(query, filter=search_filter)
         collection_name = self.vectorstore._collection.name

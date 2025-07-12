@@ -14,7 +14,7 @@ from src.rag_agent_api.services.vectore_store_service import VecStoreService
 
 router = APIRouter(
     prefix="/files",
-    tags=["agent"],
+    tags=["files"],
 )
 
 llm_model_service = LLMModelService(model_for_brief_content)

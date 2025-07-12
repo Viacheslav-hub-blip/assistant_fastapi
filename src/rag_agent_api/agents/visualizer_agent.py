@@ -50,7 +50,6 @@ class VisualizerAgent:
     def handle_table_creator(self, state: VisualizerState):
         chain = _prompt_creator(table_create_prompt) | self.model | StrOutputParser()
         answer = chain.invoke({"history": state["chat_history"], "question": state["user_input"]})
-
         return {"isComplete": True, "answer": answer}
 
     def handle_unknow(self, state: VisualizerState):

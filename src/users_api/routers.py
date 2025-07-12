@@ -35,6 +35,7 @@ async def login(email: str, password: str) -> dict[str, Any]:
     return {"status": 200, "user_id": user.id, "token": token}
 
 
-@router.get("/decode_token")
+@router.post("/decode_token")
 async def decode_token(token: str) -> dict[str, Any]:
+    print("token", token)
     return user_auth.get_current_user_by_token(token)

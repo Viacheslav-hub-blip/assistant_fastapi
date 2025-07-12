@@ -13,18 +13,20 @@ from src.rag_agent_api.services.vectore_store_service import VecStoreService
 
 router = APIRouter(
     prefix="/workspace",
-    tags=["agent"],
+    tags=["workspace"],
 )
 
 
-@router.get("/delete_workspace")
-async def delete_workspace(user_id: int, workspace_id: int) -> str:
+@router.post("/delete_workspace")
+async def delete_workspace(user_id: int, workspace_id: int) -> dict:
+    print(workspace_id)
     VecStoreService.clear_vector_stores(user_id, workspace_id)
+    WorkspaceMarketService.delete_workspace_from_market(user_id, workspace_id)
     DocumentsRemoveService.delete_all_files_in_workspace(user_id, workspace_id)
     DocumentsRemoveService.delete_all_chunks_in_workspace(user_id, workspace_id)
     MessagesService.delete_messages(user_id, workspace_id)
     WorkspacesService.delete_workspace(user_id, workspace_id)
-    return "Рабочее пространство удалено"
+    return {"status": 200}
 
 
 @router.get('/user_workspaces')

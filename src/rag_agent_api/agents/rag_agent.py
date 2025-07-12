@@ -6,6 +6,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
+from langgraph.types import Command
 
 from src.rag_agent_api.prompts.rag_agent_prompts import (
     analyze_category_prompt,
@@ -13,10 +14,8 @@ from src.rag_agent_api.prompts.rag_agent_prompts import (
     analytical_query_chain_prompt,
     opinion_query_chain_prompt,
     rerank_chain_prompt,
-    check_possibilyty_response_prompt,
     answer_with_context_prompt,
-    check_answer_for_correct_prompt,
-    correct_answer_prompt
+    define_user_question_prompt
 )
 from src.rag_agent_api.services.database.documents_getter_service import DocumentsGetterService
 
@@ -39,9 +38,7 @@ class GraphState(TypedDict):
     retrieved_documents: list[Document]
     neighboring_docs: list[Document]
 
-    answer_with_retrieve: str
     answer: str
-    answer_without_retrieve: bool
 
     used_docs: list[str]
 
@@ -53,7 +50,7 @@ class RagAgent:
         self.state = GraphState
         self.app = self.compile_graph()
 
-    def simple_chain(self, system_prompt: str, question: str) -> str:
+    def __simple_chain(self, system_prompt: str, question: str) -> str:
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system_prompt),
@@ -64,8 +61,21 @@ class RagAgent:
         answer_chain = prompt | self.model | StrOutputParser()
         return answer_chain.invoke({"question": question})
 
+    def define_user_question(self, state: GraphState):
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", define_user_question_prompt),
+                MessagesPlaceholder("chat_history"),
+                ("human", "Вопрос: {question}")
+            ]
+        )
+        chain = prompt | self.model | StrOutputParser()
+        answer = chain.invoke({"chat_history": state["chat_history"], "question": state["question"]})
+        print("define user question", answer)
+        return {"question": answer}
+
     def analyze_query_for_category_chain(self, question: str) -> str:
-        return self.simple_chain(analyze_category_prompt, question)
+        return self.__simple_chain(analyze_category_prompt, question)
 
     def analyze_query_for_category(self, state: GraphState):
         """Анализирует вопрос и разделяет его на 3 категории:
@@ -74,41 +84,42 @@ class RagAgent:
         3. Формирование мнения
         В зависимости от категории на следующих этапах убудут сформированы вспомогательные вопросы
         """
-        question_category: str = self.analyze_query_for_category_chain(state["question"])
-        return {"question": state["question"], "question_category": question_category}
-
-    def choose_query_strategy(self, state: GraphState):
-        """Взависимости от выбранной категории вопроса перенаправляет в цепочку"""
-        query_strategy: str = state["question_category"].lower()
-
-        if query_strategy == "factual":
-            return "Factual"
-        elif query_strategy == "analytical":
-            return "Analytical"
-        elif query_strategy == "opinion":
-            return "Opinion"
-        return "Simple"
+        question_category: str = self.analyze_query_for_category_chain(state["question"]).lower()
+        print("category", question_category)
+        if question_category == "factual":
+            return Command(goto="factual_query_strategy", update={"question": state["question"],
+                                                   "question_category": question_category})
+        elif question_category == "analytical":
+            return Command(goto="analytical_query_strategy", update={
+                "question": state["question"],
+                "question_category": question_category})
+        elif question_category == "opinion":
+            return Command(goto="opinion_query_strategy", update={
+                "question": state["question"],
+                "question_category": question_category})
 
     def factual_query_chain(self, question: str) -> str:
-        return self.simple_chain(factual_query_chain_prompt, question)
+        return self.__simple_chain(factual_query_chain_prompt, question)
 
     def factual_query_strategy(self, state: GraphState):
         """Цепочка, которая выполняется если выбран тип вопроса 'Фактический'
         В этом случае генерируются дполнительные воросы
         """
+        print("factual_query_strategy")
         return {"question_with_additions": self.factual_query_chain(state["question"])}
 
     def analytical_query_chain(self, question: str) -> str:
-        return self.simple_chain(analytical_query_chain_prompt, question)
+        return self.__simple_chain(analytical_query_chain_prompt, question)
 
     def analytical_query_strategy(self, state: GraphState):
         """Цепочка которая выполняется в случае если выбран тип вопроса 'Аналитический'
         Для такого вопроса генерируются уточняющие вопросы
         """
+        print("analytical_query_chain")
         return {"question_with_additions": self.analytical_query_chain(state["question"])}
 
     def opinion_query_chain(self, question: str) -> str:
-        return self.simple_chain(opinion_query_chain_prompt, question)
+        return self.__simple_chain(opinion_query_chain_prompt, question)
 
     def opinion_query_strategy(self, state: GraphState):
         """Цепочка которая выполняется в случае если выбран тип вопроса 'Формирование мнения'
@@ -118,10 +129,11 @@ class RagAgent:
 
     def retrieve_documents(self, state: GraphState):
         """Ищет документы и ограничивает выборку документами со сходством <= 1.3(наиболее релевантные)"""
+        print("========================retrieve_documents=======================")
         retrieved_documents: List[Document] = self.retriever.get_relevant_documents(state["question_with_additions"],
                                                                                     state["belongs_to"],
                                                                                     )
-
+        print("retrieved_documents", retrieved_documents)
         return {"retrieved_documents": retrieved_documents}
 
     def get_neighboring_numbers_doc(self, section_numbers_dict: dict) -> dict:
@@ -181,17 +193,6 @@ class RagAgent:
                 print("Неправильная оценка", rank)
         return {"neighboring_docs": docs_with_rank_over}
 
-    def checking_possibility_responses_chain(self, question: str, context: str):
-        """Просим модель проверить, можно ли дать ответ на вопрос по найденным документам"""
-        system_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", check_possibilyty_response_prompt),
-                ("human", "Вопрос: {question}")
-            ]
-        )
-        chain = system_prompt | self.model | StrOutputParser()
-        return chain.invoke({"question": question, "context": context})
-
     def answer_with_context_chain(self, question: str, context: str, chat_history: list[tuple[str, str]]):
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -207,44 +208,7 @@ class RagAgent:
     def generate_answer_with_retrieve_context(self, state: GraphState):
         doc_context = "".join([doc.page_content for doc in state["neighboring_docs"]])
         answer = self.answer_with_context_chain(state["question"], doc_context, state["chat_history"])
-        return {"answer_with_retrieve": answer}
-
-    def check_answer_for_correctness_chain(self, state: GraphState):
-
-        system_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", check_answer_for_correct_prompt),
-                MessagesPlaceholder("history"),
-                ("human", "Вопрос: {question}")
-            ]
-        )
-        print(state["answer_with_retrieve"])
-        chain = system_prompt | self.model | StrOutputParser()
-        return chain.invoke(
-            {"history": state["chat_history"],
-             "retrieve_answer": state["answer_with_retrieve"],
-             "question": state["question"]})
-
-    def correct_answer_chain(self, question: str, answer: str, chat_history: list[tuple[str, str]]):
-        final_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", correct_answer_prompt),
-                MessagesPlaceholder("history"),
-                ("human", "Вовпрос пользователя: {question}")
-            ]
-        )
-        chain = final_prompt | self.model | StrOutputParser()
-        return chain.invoke({"history": chat_history, "question": question, "answer": answer})
-
-    def corrective_answer(self, state: GraphState):
-        correct_answer = self.correct_answer_chain(
-            state["question"],
-            state["answer_with_retrieve"],
-            state["chat_history"])
-        return {"answer_with_retrieve": correct_answer}
-
-    def final_answer(self, state: GraphState):
-        return {"answer_without_retrieve": False, "answer":  state["answer_with_retrieve"]}
+        return {"answer": answer}
 
     def add_source_docs_names(self, state: GraphState):
         documents: list[Document] = state["neighboring_docs"]
@@ -253,6 +217,7 @@ class RagAgent:
 
     def compile_graph(self):
         workflow = StateGraph(self.state)
+        workflow.add_node("define_user_question", self.define_user_question)
         workflow.add_node("analyze_query_for_category", self.analyze_query_for_category)
         workflow.add_node("factual_query_strategy", self.factual_query_strategy)
         workflow.add_node("analytical_query_strategy", self.analytical_query_strategy)
@@ -261,20 +226,10 @@ class RagAgent:
         workflow.add_node("get_neighboring_docs", self.get_neighboring_docs)
         workflow.add_node("reranked_documents", self.reranked_documents)
         workflow.add_node("generate_answer_with_retrieve_context", self.generate_answer_with_retrieve_context)
-        workflow.add_node("final_answer", self.final_answer)
-        workflow.add_node("corrective_answer", self.corrective_answer)
         workflow.add_node("add_source_docs_names", self.add_source_docs_names)
 
-        workflow.add_edge(START, "analyze_query_for_category")
-        workflow.add_conditional_edges(
-            "analyze_query_for_category",
-            self.choose_query_strategy,
-            {
-                "Factual": "factual_query_strategy",
-                "Analytical": "analytical_query_strategy",
-                "Opinion": "opinion_query_strategy",
-            }
-        )
+        workflow.add_edge(START, "define_user_question")
+        workflow.add_edge("define_user_question", "analyze_query_for_category")
 
         workflow.add_edge("factual_query_strategy", "retrieve_documents")
         workflow.add_edge("analytical_query_strategy", "retrieve_documents")
@@ -284,17 +239,8 @@ class RagAgent:
         workflow.add_edge("get_neighboring_docs", "reranked_documents")
 
         workflow.add_edge("reranked_documents", "generate_answer_with_retrieve_context")
+        workflow.add_edge("generate_answer_with_retrieve_context", "add_source_docs_names")
 
-        workflow.add_conditional_edges(
-            "generate_answer_with_retrieve_context",
-            self.check_answer_for_correctness_chain,
-            {
-                "БЕЗ ИЗМЕНЕНИЙ": "final_answer",
-                "НУЖНЫ ИЗМЕНЕНИЯ": "corrective_answer"
-            }
-        )
-        workflow.add_edge("corrective_answer", "final_answer")
-        workflow.add_edge("final_answer", "add_source_docs_names")
         workflow.add_edge("add_source_docs_names", END)
         return workflow.compile()
 

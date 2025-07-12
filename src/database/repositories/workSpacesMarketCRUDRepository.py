@@ -31,3 +31,11 @@ def select_workspace_by_user_id_and_name(user_id: int, workspace_name: str) -> W
     with session as s:
         return s.query(WorkspacesMarket).filter(WorkspacesMarket.user_id == user_id,
                                                 WorkspacesMarket.workspace_name == workspace_name).first()
+
+
+def delete_workspace_from_market(user_id: int, workspace_id: int):
+    print("удаление пространство из маркета")
+    with session as s:
+        s.query(WorkspacesMarket).filter(WorkspacesMarket.user_id == user_id,
+                                         WorkspacesMarket.source_workspace_id == workspace_id).delete()
+        s.commit()

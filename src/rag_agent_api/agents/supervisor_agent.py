@@ -3,13 +3,15 @@ from typing import TypedDict, Literal, Any
 from langchain_core.documents import Document
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
+from langgraph.types import Command
 
 from src.rag_agent_api.agents.rag_agent import RagAgent
 from src.rag_agent_api.agents.searcher_agent import SeracherAgent
 from src.rag_agent_api.agents.visualizer_agent import VisualizerAgent
+from src.rag_agent_api.prompts.supervisor_prompts import routing_prompt, simple_task_prompt
 
 
 class SupervisorState(TypedDict):
@@ -33,7 +35,7 @@ class SupervisorState(TypedDict):
 
     retrieved_documents: list[Document]
     neighboring_docs: list[Document]
-    used_docs: list[str]
+    used_docs_names: list[str]
 
 
 class SuperVisor:
@@ -44,46 +46,27 @@ class SuperVisor:
         self.app = self.compile_graph()
 
     def route_task(self, state: SupervisorState):
-        system_prompt = """
-        Ты  - полезный помощник, который управляет командной специализированных агентов.
-        
-        В вашем распоряжении два специализированных агента:        
-        1. Агент по работе с нформацией (Retriever). Он извлекает ифнормацию из пользовательских документов
-        2. Агент для визуализации информации (Visualizer). Он строит таблицы, диаграммы, графики и другие графические элементы
-        
-        
-        Ваша задача:
-        1. Проанализировать запрос пользователя
-        2. Опрделеить, какой специализированный агент должен проанализировать запрос 
-        3. Вернуть одно слово: название агента - retriever, visualizer
-        
-        Для ответа используй только слова: retriever, visualizer
-        """
-
+        print("ROUTE TASK")
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", system_prompt),
-                ("human", "{question}"),
+                ("system", routing_prompt),
+                MessagesPlaceholder("chat_history"),
+                ("human", "Вопрос: {question}")
             ]
         )
-
         chain = prompt | self.model | StrOutputParser()
+        ans = chain.invoke({"chat_history": state["chat_history"], "question": state["user_input"]})
+        if ans == "visualizer":
+            return Command(goto="visualizer", update={"routing": ans})
+        if ans == "rag_agent":
+            return Command(goto="rag_agent", update={"routing": ans})
+        if ans == "web_searcher":
+            return Command(goto="web_searcher", update={"routing": ans})
+        return Command(goto="simple", update={"routing": ans})
 
-        ans = chain.invoke({"question": state["user_input"]})
-        return {"routing": ans}
-
-    def route_to_next_step(self, state: SupervisorState) -> Literal["retriever", "visualizer"]:
-        route = state["routing"].lower()
-        if route == "visualizer":
-            return "visualizer"
-        return "retriever"
-
-    def handle_retriever_task(self, state: SupervisorState):
-        rag_agent = RagAgent(
-            self.model,
-            self.retriever,
-        )
-
+    def handle_rag_agent(self, state: SupervisorState):
+        print("rag agent")
+        rag_agent = RagAgent(self.model, self.retriever)
         result = rag_agent().invoke(
             {"question": state["user_input"],
              "user_id": state["user_id"],
@@ -91,20 +74,16 @@ class SuperVisor:
              "belongs_to": state["belongs_to"],
              "chat_history": state["chat_history"]}
         )
-
+        print("ANSWER RAG AGENT", result)
         agent_result = {
-            "type": "retriever",
-            "data": result,
-            "complete": bool(result.get("used_docs", None)),
+            "type": "rag_agent"
         }
-
         return {
             "agent_result": agent_result,
-            "complete": agent_result["complete"],
+            "complete": True,
             "answer": result.get("answer", ""),
-            "used_docs": result.get("used_docs", []),
-            "neighboring_docs": [doc.page_content for doc in result.get("neighboring_docs", [])],
-            "used_docs_names": result.get("used_docs", [])
+            "neighboring_docs": [doc.page_content for doc in result["neighboring_docs"]],
+            "used_docs_names": result["used_docs"]
         }
 
     def handle_visualizer_task(self, state: SupervisorState):
@@ -127,27 +106,58 @@ class SuperVisor:
             "answer": result.get("answer", "")
         }
 
+    def web_searcher(self, state: SupervisorState):
+        print("web searcher")
+        searcher_agent = SeracherAgent(self.model)
+
+        result = searcher_agent().invoke(
+            {"chat_history": state["chat_history"],
+             "user_input": state["user_input"]}
+        )
+
+        agent_result = {
+            "type": "visualizer",
+            "data": result,
+            "complete": True,
+        }
+
+        return {
+            "agent_result": agent_result,
+            "complete": agent_result["complete"],
+            "answer": result.get("searched_content", "Не удалось дать овтет")
+        }
+
+    def handle_simple_task(self, state: SupervisorState):
+        print("simple task")
+
+        chain = ChatPromptTemplate.from_template(simple_task_prompt) | self.model | StrOutputParser()
+        answer = chain.invoke({"chat_history": state["chat_history"], "user_input": state["user_input"]})
+        agent_result = {
+            "type": "simple",
+        }
+        return {
+            "agent_result": agent_result,
+            "complete": True,
+            "answer": answer,
+        }
+
     def supervisor_results(self, state: SupervisorState):
         result = state["agent_result"]
-
+        print("AGENT TYPE", result["type"])
+        print("================STATE RESULT=====================")
+        print(state)
         match result["type"]:
-            case "retriever":
-                if not result["complete"]:
-                    print("Retriever не нашел документы")
-                    searcher = SeracherAgent(self.model)
-                    try:
-                        answer = searcher().invoke({"user_input": state["user_input"]})["answer"]
-                        return {"complete": True, "answer": answer, "use_web_search": True}
-                    except Exception as e:
-                        return {"complete": False}
+            case "rag_agent":
                 return {"complete": True}
-
             case "visualizer":
                 if not result["complete"]:
                     print("Visualizer не завершил работу. Требуется дополнительная обработка.")
                     return {"complete": False}
                 return {"use_visualizer": True, "complete": True}
-
+            case "web_searcher":
+                return {"complete": True}
+            case "simple":
+                return {"complete": True}
             case _:
                 print(f"Неизвестный тип результата: {result['type']}")
                 return {"complete": False}
@@ -155,21 +165,18 @@ class SuperVisor:
     def compile_graph(self):
         workflow = StateGraph(self.state)
         workflow.add_node("route_task", self.route_task)
-        workflow.add_node("retriever", self.handle_retriever_task)
+        workflow.add_node("rag_agent", self.handle_rag_agent)
+        workflow.add_node("simple", self.handle_simple_task)
         workflow.add_node("visualizer", self.handle_visualizer_task)
         workflow.add_node("supervisor", self.supervisor_results)
+        workflow.add_node("web_searcher", self.web_searcher)
 
         workflow.add_edge(START, "route_task")
-        workflow.add_conditional_edges(
-            "route_task",
-            self.route_to_next_step,
-            {
-                "retriever": "retriever",
-                "visualizer": "visualizer"
-            }
-        )
-        workflow.add_edge("retriever", "supervisor")
+
+        workflow.add_edge("rag_agent", "supervisor")
         workflow.add_edge("visualizer", "supervisor")
+        workflow.add_edge("simple", "supervisor")
+        workflow.add_edge("web_searcher", "supervisor")
 
         workflow.add_edge("supervisor", END)
 

@@ -14,15 +14,18 @@ def add_in_favorite(id: int, user_id: int, workspace_id: int, text: str) -> int:
 
 
 def delete_from_favorite(id: int, user_id: int, workspace_id: int):
-    with session() as s:
-        return s.query(FavoriteMessages).filter(
+    with session as s:
+        s.query(FavoriteMessages).filter(
             FavoriteMessages.user_id == user_id,
             FavoriteMessages.workspace_id == workspace_id,
             FavoriteMessages.id == id
         ).delete()
+        s.commit()
 
 
-def select_all_favorite_messages_from_workspace(user_id: int, workspace_id: int) -> List[FavoriteMessages]:
+def select_all_favorite_messages(user_id: int) -> List[FavoriteMessages]:
     with session as s:
-        return s.query(FavoriteMessages).filter(FavoriteMessages.user_id == user_id,
-                                                FavoriteMessages.workspace_id == workspace_id).all()
+        return s.query(FavoriteMessages).filter(FavoriteMessages.user_id == user_id).all()
+
+
+
